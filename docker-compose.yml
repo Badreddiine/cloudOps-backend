@@ -1,0 +1,153 @@
+services:
+  # ---------------------------------------------------------
+  # API Gateway
+  # ---------------------------------------------------------
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+    depends_on:
+      keycloak:
+        condition: service_started # Modifié : n'attend plus le statut "healthy"
+      incident-service:
+        condition: service_started
+    networks:
+      - cloudops-network
+
+  # ---------------------------------------------------------
+  # Incident Service
+  # ---------------------------------------------------------
+  incident-service:
+    build:
+      context: .
+      dockerfile: incident-service/Dockerfile
+    container_name: incident-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SERVER_PORT=8082
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://incident-db:5432/incidents
+      - SPRING_DATASOURCE_USERNAME=incident_user
+      - SPRING_DATASOURCE_PASSWORD=incident_password
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      incident-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_started # Modifié : démarrage immédiat après lancement Keycloak
+      kafka:
+        condition: service_healthy
+    networks:
+      - cloudops-network
+
+  # ---------------------------------------------------------
+  # Keycloak & Databases
+  # ---------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.7
+    container_name: keycloak
+    command: start-dev --import-realm
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=password
+      - KC_HOSTNAME_STRICT=false
+      - KC_HTTP_ENABLED=true
+      - KC_HTTP_PORT=8180
+      - KC_HEALTH_ENABLED=true
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - cloudops-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8180/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+
+  keycloak-db:
+    image: postgres:15-alpine
+    container_name: keycloak-db
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - keycloak_data:/var/lib/postgresql/data
+    networks:
+      - cloudops-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      retries: 5
+
+  incident-db:
+    image: postgres:15-alpine
+    container_name: incident-db
+    environment:
+      - POSTGRES_DB=incidents
+      - POSTGRES_USER=incident_user
+      - POSTGRES_PASSWORD=incident_password
+    volumes:
+      - incident_data:/var/lib/postgresql/data
+    networks:
+      - cloudops-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U incident_user -d incidents"]
+      interval: 5s
+      retries: 5
+
+  # ---------------------------------------------------------
+  # Infrastructure (Kafka/Zookeeper)
+  # ---------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+    networks:
+      - cloudops-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    depends_on:
+      - zookeeper
+    networks:
+      - cloudops-network
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  keycloak_data:
+  incident_data:
+
+networks:
+  cloudops-network:
+    driver: bridge

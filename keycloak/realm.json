@@ -1,0 +1,121 @@
+{
+  "realm": "cloudops-realm",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "bruteForceProtected": true,
+  "maxFailureWaitSeconds": 1800,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "failureFactor": 5,
+  "passwordPolicy": "length(6)",
+  "sslRequired": "none",
+  "registrationEmailAsUsername": true,
+  "verifyEmail": false,
+
+  "roles": {
+    "realm": [
+      { "name": "ADMIN",   "description": "Administrateur système" },
+      { "name": "DEVOPS",  "description": "Ingénieur DevOps" },
+      { "name": "SUPPORT", "description": "Agent de support" },
+      { "name": "VIEWER",  "description": "Utilisateur en lecture seule" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "cloudops-frontend",
+      "rootUrl": "http://localhost:3000",
+      "adminUrl": "http://localhost:3000",
+      "baseUrl": "/",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"],
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "user.attribute": "foo",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "incident-service",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "incident-service-secret",
+      "bearerOnly": true,
+      "consentRequired": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true
+    }
+  ],
+
+  "users": [
+    {
+      "username": "git init",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "User",
+      "email": "admin@cloudops.io",
+      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
+      "realmRoles": ["ADMIN"]
+    },
+    {
+      "username": "devops@cloudops.io",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "DevOps",
+      "lastName": "User",
+      "email": "devops@cloudops.io",
+      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
+      "realmRoles": ["DEVOPS"]
+    },
+    {
+      "username": "support@cloudops.io",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Support",
+      "lastName": "User",
+      "email": "support@cloudops.io",
+      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
+      "realmRoles": ["SUPPORT"]
+    },
+    {
+      "username": "viewer@cloudops.io",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Viewer",
+      "lastName": "User",
+      "email": "viewer@cloudops.io",
+      "credentials": [{ "type": "password", "value": "123456", "temporary": false }],
+      "realmRoles": ["VIEWER"]
+    }
+  ]
+}

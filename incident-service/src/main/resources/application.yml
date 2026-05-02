@@ -1,0 +1,26 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: incident-service
+
+  datasource:
+    url: jdbc:postgresql://incident-db:5432/incidents
+    # ... reste de votre config
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+
+# ✅ SpringDoc ici, au niveau racine, pas dans spring.cloud.gateway
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui/index.html
+  show-actuator: false
