@@ -27,12 +27,29 @@ spring:
             allowedHeaders:
               - "*"
             allowCredentials: true
-      # --- CORRECT : "routes" doit être aligné avec "globalcors" ---
+
       routes:
+        # ─── Incident Service ─────────────────────────────────────────────
         - id: incident-service
           uri: http://incident-service:8082
           predicates:
             - Path=/api/incidents/**
+          filters:
+            - TokenRelay=
+
+        # ─── Notification Service ─────────────────────────────────────────
+        - id: notification-service
+          uri: http://notification-service:8083
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - TokenRelay=
+
+        # ─── WebSocket STOMP (notifications temps reel) ───────────────────
+        - id: notification-websocket
+          uri: ws://notification-service:8083
+          predicates:
+            - Path=/ws/**
           filters:
             - TokenRelay=
 
@@ -42,3 +59,54 @@ logging:
     org.springframework.http.server.reactive: DEBUG
     org.springframework.web.reactive: DEBUG
     reactor.netty: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  cloud:
+    gateway:
+      routes:
+        - id: incident-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/incidents/**
+          filters:
+            - TokenRelay=
+
+        - id: notification-service
+          uri: http://localhost:8083
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - TokenRelay=
+
+        - id: notification-websocket
+          uri: ws://localhost:8083
+          predicates:
+            - Path=/ws/**
+          filters:
+            - TokenRelay=
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8180/realms/cloudops-realm/protocol/openid-connect/certs

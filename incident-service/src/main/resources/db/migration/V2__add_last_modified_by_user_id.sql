@@ -1,1 +1,0 @@
-ALTER TABLE incidents ADD COLUMN IF NOT EXISTS last_modified_by_user_id VARCHAR(255);

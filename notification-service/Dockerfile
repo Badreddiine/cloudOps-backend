@@ -18,12 +18,12 @@ COPY notification-service/pom.xml  notification-service/pom.xml
 RUN mvn dependency:go-offline -B
 
 # 4. Copier les sources
-COPY common/src      common/src
-COPY api-gateway/src api-gateway/src
+COPY common/src                common/src
+COPY notification-service/src  notification-service/src
 
 # 5. Builder
 RUN mvn clean package -Dmaven.test.skip=true -B \
-    -pl api-gateway -am
+    -pl notification-service -am
 
 # ─────────────────────────────────────────
 # Stage 2 : Run
@@ -34,13 +34,13 @@ WORKDIR /app
 
 RUN addgroup -S cloudops && adduser -S cloudops -G cloudops
 
-COPY --from=builder /app/api-gateway/target/*.jar app.jar
+COPY --from=builder /app/notification-service/target/*.jar app.jar
 
 RUN chown cloudops:cloudops app.jar
 
 USER cloudops
 
-EXPOSE 8080
+EXPOSE 8083
 
 ENTRYPOINT ["java", \
             "-XX:+UseContainerSupport", \

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px">
+<div style="background:#fff;padding:24px;border-radius:8px;max-width:600px;margin:auto;border-left:4px solid #D85A30">
+    <h2 style="color:#D85A30">⚠ SLA Expiré</h2>
+    <p><strong>Incident :</strong> <span th:text="${title}"/></p>
+    <p><strong>Deadline SLA :</strong> <span th:text="${slaDeadline}"/></p>
+    <p><strong>Breach détecté à :</strong> <span th:text="${breachedAt}"/></p>
+    <a href="http://app.cloudops.io/incidents"
+       style="background:#D85A30;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none">
+        Gérer les incidents
+    </a>
+</div>
+</body>
+</html>

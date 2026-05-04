@@ -8,20 +8,20 @@ WORKDIR /app
 # 1. Copier le POM parent
 COPY pom.xml .
 
-# 2. Copier les POMs de chaque module (cache des dépendances)
-COPY common/pom.xml           common/pom.xml
-COPY api-gateway/pom.xml      api-gateway/pom.xml
-COPY incident-service/pom.xml incident-service/pom.xml
+# 2. Copier les POMs de TOUS les modules
+COPY common/pom.xml                common/pom.xml
+COPY api-gateway/pom.xml           api-gateway/pom.xml
+COPY incident-service/pom.xml      incident-service/pom.xml
+COPY notification-service/pom.xml  notification-service/pom.xml
 
-# 3. Télécharger toutes les dépendances en cache
+# 3. Telecharger les dependances en cache
 RUN mvn dependency:go-offline -B
 
 # 4. Copier les sources
 COPY common/src           common/src
 COPY incident-service/src incident-service/src
 
-# 5. Builder uniquement incident-service et ses dépendances (-am = also-make)
-#    -Dmaven.test.skip=true = skip compilation ET exécution des tests
+# 5. Builder
 RUN mvn clean package -Dmaven.test.skip=true -B \
     -pl incident-service -am
 
@@ -32,7 +32,6 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# Utilisateur non-root
 RUN addgroup -S cloudops && adduser -S cloudops -G cloudops
 
 COPY --from=builder /app/incident-service/target/*.jar app.jar

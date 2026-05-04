@@ -1,57 +1,107 @@
 services:
-  # ---------------------------------------------------------
-  # API Gateway
-  # ---------------------------------------------------------
-  api-gateway:
-    build:
-      context: .
-      dockerfile: api-gateway/Dockerfile
-    container_name: api-gateway
-    ports:
-      - "8080:8080"
+
+  # ═══════════════════════════════════════════════════════════════
+  # ORACLE XE EU — PRIMARY
+  # ═══════════════════════════════════════════════════════════════
+  oracle-eu:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: oracle-eu-primary
     environment:
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
-    depends_on:
-      keycloak:
-        condition: service_started # Modifié : n'attend plus le statut "healthy"
-      incident-service:
-        condition: service_started
+      - ORACLE_PASSWORD=CloudOps2025
+      - ORACLE_DATABASE=CLOUDOPS
+      - APP_USER=incidents_app
+      - APP_USER_PASSWORD=AppIncidents2025
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-eu-data:/opt/oracle/oradata
+      - ./oracle/init:/container-entrypoint-initdb.d
     networks:
       - cloudops-network
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
 
-  # ---------------------------------------------------------
-  # Incident Service
-  # ---------------------------------------------------------
-  incident-service:
-    build:
-      context: .
-      dockerfile: incident-service/Dockerfile
-    container_name: incident-service
-    ports:
-      - "8082:8082"
+  # ═══════════════════════════════════════════════════════════════
+  # ORACLE XE AF — STANDBY Afrique
+  # ═══════════════════════════════════════════════════════════════
+  oracle-af:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: oracle-af-standby
     environment:
-      - SERVER_PORT=8082
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://incident-db:5432/incidents
-      - SPRING_DATASOURCE_USERNAME=incident_user
-      - SPRING_DATASOURCE_PASSWORD=incident_password
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-    depends_on:
-      incident-db:
-        condition: service_healthy
-      keycloak:
-        condition: service_started # Modifié : démarrage immédiat après lancement Keycloak
-      kafka:
-        condition: service_healthy
+      - ORACLE_PASSWORD=CloudOps2025
+      - ORACLE_DATABASE=CLOUDOPSAF
+      - APP_USER=incidents_app
+      - APP_USER_PASSWORD=AppIncidents2025
+    ports:
+      - "1522:1521"
+    volumes:
+      - oracle-af-data:/opt/oracle/oradata
     networks:
       - cloudops-network
+    depends_on:
+      oracle-eu:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
 
-  # ---------------------------------------------------------
-  # Keycloak & Databases
-  # ---------------------------------------------------------
+  # ═══════════════════════════════════════════════════════════════
+  # ORACLE XE US — STANDBY Amerique
+  # ═══════════════════════════════════════════════════════════════
+  oracle-us:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: oracle-us-standby
+    environment:
+      - ORACLE_PASSWORD=CloudOps2025
+      - ORACLE_DATABASE=CLOUDOPSUS
+      - APP_USER=incidents_app
+      - APP_USER_PASSWORD=AppIncidents2025
+    ports:
+      - "1523:1521"
+    volumes:
+      - oracle-us-data:/opt/oracle/oradata
+    networks:
+      - cloudops-network
+    depends_on:
+      oracle-eu:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
+  # ═══════════════════════════════════════════════════════════════
+  # KEYCLOAK DB — PostgreSQL
+  # ═══════════════════════════════════════════════════════════════
+  keycloak-db:
+    image: postgres:15-alpine
+    container_name: keycloak-db
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - keycloak-data:/var/lib/postgresql/data
+    networks:
+      - cloudops-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ═══════════════════════════════════════════════════════════════
+  # KEYCLOAK
+  # ═══════════════════════════════════════════════════════════════
   keycloak:
     image: quay.io/keycloak/keycloak:23.0.7
     container_name: keycloak
@@ -81,61 +131,51 @@ services:
       interval: 15s
       timeout: 10s
       retries: 15
+      start_period: 60s
 
-  keycloak-db:
-    image: postgres:15-alpine
-    container_name: keycloak-db
-    environment:
-      - POSTGRES_DB=keycloak
-      - POSTGRES_USER=keycloak
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - keycloak_data:/var/lib/postgresql/data
-    networks:
-      - cloudops-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak"]
-      interval: 5s
-      retries: 5
-
-  incident-db:
-    image: postgres:15-alpine
-    container_name: incident-db
-    environment:
-      - POSTGRES_DB=incidents
-      - POSTGRES_USER=incident_user
-      - POSTGRES_PASSWORD=incident_password
-    volumes:
-      - incident_data:/var/lib/postgresql/data
-    networks:
-      - cloudops-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U incident_user -d incidents"]
-      interval: 5s
-      retries: 5
-
-  # ---------------------------------------------------------
-  # Infrastructure (Kafka/Zookeeper)
-  # ---------------------------------------------------------
+  # ═══════════════════════════════════════════════════════════════
+  # ZOOKEEPER
+  # ═══════════════════════════════════════════════════════════════
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
     environment:
       - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
     networks:
       - cloudops-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
+  # ═══════════════════════════════════════════════════════════════
+  # KAFKA
+  # ═══════════════════════════════════════════════════════════════
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
     environment:
       - KAFKA_BROKER_ID=1
       - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     networks:
       - cloudops-network
     healthcheck:
@@ -143,10 +183,145 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+      start_period: 30s
+
+  # ═══════════════════════════════════════════════════════════════
+  # API GATEWAY
+  # ═══════════════════════════════════════════════════════════════
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+      - SPRING_CLOUD_GATEWAY_ROUTES_0_ID=incident-service
+      - SPRING_CLOUD_GATEWAY_ROUTES_0_URI=http://incident-service:8082
+      - SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0=Path=/api/incidents/**
+      - SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0=TokenRelay=
+      - SPRING_CLOUD_GATEWAY_ROUTES_1_ID=notification-service
+      - SPRING_CLOUD_GATEWAY_ROUTES_1_URI=http://notification-service:8083
+      - SPRING_CLOUD_GATEWAY_ROUTES_1_PREDICATES_0=Path=/api/notifications/**
+      - SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_0=TokenRelay=
+      - SPRING_CLOUD_GATEWAY_ROUTES_2_ID=notification-websocket
+      - SPRING_CLOUD_GATEWAY_ROUTES_2_URI=ws://notification-service:8083
+      - SPRING_CLOUD_GATEWAY_ROUTES_2_PREDICATES_0=Path=/ws/**
+      - SPRING_CLOUD_GATEWAY_ROUTES_2_FILTERS_0=TokenRelay=
+    depends_on:
+      keycloak:
+        condition: service_started
+      incident-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    networks:
+      - cloudops-network
+
+  # ═══════════════════════════════════════════════════════════════
+  # INCIDENT SERVICE
+  # ═══════════════════════════════════════════════════════════════
+  incident-service:
+    build:
+      context: .
+      dockerfile: incident-service/Dockerfile
+    container_name: incident-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=8082
+      - ORACLE_EU_URL=jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
+      - ORACLE_EU_USERNAME=incidents_app
+      - ORACLE_EU_PASSWORD=AppIncidents2025
+      - ORACLE_AF_URL=jdbc:oracle:thin:@//oracle-af:1521/XEPDB1
+      - ORACLE_AF_USERNAME=incidents_app
+      - ORACLE_AF_PASSWORD=AppIncidents2025
+      - ORACLE_US_URL=jdbc:oracle:thin:@//oracle-us:1521/XEPDB1
+      - ORACLE_US_USERNAME=incidents_app
+      - ORACLE_US_PASSWORD=AppIncidents2025
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update      # ← update au lieu de validate
+      - SPRING_JPA_SHOW_SQL=true
+      - SPRING_FLYWAY_ENABLED=false               # ← Flyway désactivé
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_PRODUCER_KEY_SERIALIZER=org.apache.kafka.common.serialization.StringSerializer
+      - SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER=org.springframework.kafka.support.serializer.JsonSerializer
+      - SPRING_KAFKA_PRODUCER_PROPERTIES_SPRING_JSON_ADD_TYPE_HEADERS=false
+      - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
+    depends_on:
+      oracle-eu:
+        condition: service_healthy
+      oracle-af:
+        condition: service_healthy
+      oracle-us:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    networks:
+      - cloudops-network
+
+  # ═══════════════════════════════════════════════════════════════
+  # NOTIFICATION SERVICE
+  # ═══════════════════════════════════════════════════════════════
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=8083
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
+      - SPRING_DATASOURCE_USERNAME=incidents_app
+      - SPRING_DATASOURCE_PASSWORD=AppIncidents2025
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update      # ← update au lieu de validate
+      - SPRING_FLYWAY_ENABLED=false               # ← Flyway désactivé
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=notification-service
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
+      - SPRING_KAFKA_CONSUMER_KEY_DESERIALIZER=org.apache.kafka.common.serialization.StringDeserializer
+      - SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER=org.springframework.kafka.support.serializer.JsonDeserializer
+      - SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_JSON_TRUSTED_PACKAGES=io.cloudops.*
+      - SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_JSON_USE_TYPE_HEADERS=false
+      - SPRING_MAIL_HOST=${MAIL_HOST:-smtp.gmail.com}
+      - SPRING_MAIL_PORT=${MAIL_PORT:-587}
+      - SPRING_MAIL_USERNAME=${MAIL_USERNAME:-test@cloudops.io}
+      - SPRING_MAIL_PASSWORD=${MAIL_PASSWORD:-testpassword}
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
+      - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
+    depends_on:
+      oracle-eu:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    networks:
+      - cloudops-network
 
 volumes:
-  keycloak_data:
-  incident_data:
+  oracle-eu-data:
+  oracle-af-data:
+  oracle-us-data:
+  keycloak-data:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
 
 networks:
   cloudops-network:

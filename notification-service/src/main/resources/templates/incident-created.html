@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px">
+<div style="background:#fff;padding:24px;border-radius:8px;max-width:600px;margin:auto">
+    <h2 style="color:#7F77DD">Nouvel incident créé</h2>
+    <p><strong>ID :</strong> <span th:text="${incidentId}"/></p>
+    <p><strong>Titre :</strong> <span th:text="${title}"/></p>
+    <p><strong>Reporté par :</strong> <span th:text="${reportedBy}"/></p>
+    <a th:href="'http://app.cloudops.io/incidents/' + ${incidentId}"
+       style="background:#7F77DD;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none">
+        Voir l'incident
+    </a>
+</div>
+</body>
+</html>

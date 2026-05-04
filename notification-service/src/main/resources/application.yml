@@ -1,9 +1,21 @@
 server:
-  port: 8082
+  port: 8083
 
 spring:
   application:
-    name: incident-service
+    name: notification-service
+
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    username: incidents_app
+    password: AppIncidents2025
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      pool-name: NotificationPool
+      minimum-idle: 2
+      maximum-pool-size: 10
+      connection-timeout: 30000
+      connection-test-query: SELECT 1 FROM DUAL
 
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
@@ -14,11 +26,32 @@ spring:
       hibernate:
         format_sql: true
 
-  spring:
-    flyway:
-      enabled: true
+  flyway:
+    enabled: false
+    locations: classpath:db/migration/oracle
+    baseline-on-migrate: true
+    user: incidents_app
+    password: AppIncidents2025
 
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "io.cloudops.*"
+        spring.json.use.type.headers: false
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
 
   security:
     oauth2:
@@ -27,60 +60,17 @@ spring:
           jwk-set-uri: http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
           issuer-uri: http://keycloak:8180/realms/cloudops-realm
 
-  kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.add.type.headers: false
-
 # ─── Resilience4j ─────────────────────────────────────────────────────────────
 resilience4j:
   circuitbreaker:
     instances:
-      kafkaProducer:
+      kafkaConsumer:
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
         register-health-indicator: true
         sliding-window-type: COUNT_BASED
-
-# ─── Multi-Region Oracle DataSources ──────────────────────────────────────────
-oracle:
-  eu:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: incidents_app
-    password: AppIncidents2025
-    hikari:
-      pool-name: IncidentPool-EU
-      minimum-idle: 5
-      maximum-pool-size: 20
-      connection-timeout: 30000
-      connection-test-query: SELECT 1 FROM DUAL
-
-  af:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: incidents_app
-    password: AppIncidents2025
-    hikari:
-      pool-name: IncidentPool-AF
-      minimum-idle: 2
-      maximum-pool-size: 10
-      connection-timeout: 30000
-      connection-test-query: SELECT 1 FROM DUAL
-
-  us:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: incidents_app
-    password: AppIncidents2025
-    hikari:
-      pool-name: IncidentPool-US
-      minimum-idle: 2
-      maximum-pool-size: 10
-      connection-timeout: 30000
-      connection-test-query: SELECT 1 FROM DUAL
 
 springdoc:
   api-docs:
@@ -96,6 +86,8 @@ logging:
     io.cloudops: DEBUG
     org.flywaydb: INFO
     com.zaxxer.hikari: INFO
+    org.springframework.kafka: INFO
+    org.springframework.mail: DEBUG
 
 # ─── Docker Profile ───────────────────────────────────────────────────────────
 ---
@@ -103,6 +95,12 @@ spring:
   config:
     activate:
       on-profile: docker
+
+  datasource:
+    url: jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
+
+  flyway:
+    url: jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1  # ← CORRECTION
 
   security:
     oauth2:
@@ -114,20 +112,18 @@ spring:
   kafka:
     bootstrap-servers: kafka:9092
 
-oracle:
-  eu:
-    url: jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
-  af:
-    url: jdbc:oracle:thin:@//oracle-af:1521/XEPDB1
-  us:
-    url: jdbc:oracle:thin:@//oracle-us:1521/XEPDB1
-
 # ─── Local Profile ────────────────────────────────────────────────────────────
 ---
 spring:
   config:
     activate:
       on-profile: local
+
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+
+  flyway:
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1  # ← CORRECTION
 
   security:
     oauth2:
@@ -139,10 +135,6 @@ spring:
   kafka:
     bootstrap-servers: localhost:29092
 
-oracle:
-  eu:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-  af:
-    url: jdbc:oracle:thin:@//localhost:1522/XEPDB1
-  us:
-    url: jdbc:oracle:thin:@//localhost:1523/XEPDB1
+  mail:
+    host: localhost
+    port: 1025
