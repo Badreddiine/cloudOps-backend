@@ -50,15 +50,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      # 💡 OPTIMISATION : On télécharge le JAR compilé par le job "build".
+      # Plus besoin d'installer le JDK ni de lancer "mvn clean package" ici !
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Build JAR
-        run: mvn -pl common,incident-service -am clean package -DskipTests
+          name: incident-service-jar
+          path: incident-service/target/
 
       - name: Build Docker image
         run: |
