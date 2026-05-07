@@ -1,0 +1,118 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: reporting-service
+
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    username: incidents_app
+    password: AppIncidents2025
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.OracleDialect
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 20
+
+  flyway:
+    enabled: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8180/realms/cloudops-realm
+          jwk-set-uri: http://localhost:8180/realms/cloudops-realm/protocol/openid-connect/certs
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: reporting-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "io.cloudops.common.event,io.cloudops.common.dto"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: java.lang.Object
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          min-idle: 2
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000  # 5 minutes en ms
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  components:
+    security-schemes:
+      bearerAuth:
+        type: http
+        scheme: bearer
+        bearer-format: JWT
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    io.cloudops: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO
+
+---
+# Profil Docker - surcharge les valeurs locales
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1}
+    username: ${SPRING_DATASOURCE_USERNAME:incidents_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:AppIncidents2025}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://keycloak:8180/realms/cloudops-realm}
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs}
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT:6379}

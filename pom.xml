@@ -17,12 +17,12 @@
   <version>0.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
 
-  <!-- ─── Modules ──────────────────────────────────────────────────────────── -->
   <modules>
     <module>common</module>
     <module>incident-service</module>
     <module>api-gateway</module>
-    <module>notification-service</module>   <!-- ← était manquant -->
+    <module>notification-service</module>
+    <module>reporting-service</module>
   </modules>
 
   <properties>
@@ -30,12 +30,16 @@
     <spring-cloud.version>2024.0.0</spring-cloud.version>
     <resilience4j.version>2.2.0</resilience4j.version>
     <oracle.version>23.4.0.24.05</oracle.version>
+    <poi.version>5.3.0</poi.version>
+    <itext.version>8.0.5</itext.version>
+    <mapstruct.version>1.5.5.Final</mapstruct.version>
+    <springdoc.version>2.6.0</springdoc.version>
   </properties>
 
   <dependencyManagement>
     <dependencies>
 
-      <!-- ─── Spring Cloud ───────────────────────────────────────────────── -->
+      <!-- Spring Cloud -->
       <dependency>
         <groupId>org.springframework.cloud</groupId>
         <artifactId>spring-cloud-dependencies</artifactId>
@@ -44,7 +48,7 @@
         <scope>import</scope>
       </dependency>
 
-      <!-- ─── Resilience4j ───────────────────────────────────────────────── -->
+      <!-- Resilience4j -->
       <dependency>
         <groupId>io.github.resilience4j</groupId>
         <artifactId>resilience4j-bom</artifactId>
@@ -53,7 +57,7 @@
         <scope>import</scope>
       </dependency>
 
-      <!-- ─── Oracle JDBC ────────────────────────────────────────────────── -->
+      <!-- Oracle JDBC -->
       <dependency>
         <groupId>com.oracle.database.jdbc</groupId>
         <artifactId>ojdbc11</artifactId>
@@ -65,14 +69,14 @@
         <version>${oracle.version}</version>
       </dependency>
 
-      <!-- ─── Flyway Oracle ──────────────────────────────────────────────── -->
+      <!-- Flyway Oracle -->
       <dependency>
         <groupId>org.flywaydb</groupId>
         <artifactId>flyway-database-oracle</artifactId>
         <version>10.10.0</version>
       </dependency>
 
-      <!-- ─── Testcontainers ─────────────────────────────────────────────── -->
+      <!-- Testcontainers -->
       <dependency>
         <groupId>org.testcontainers</groupId>
         <artifactId>testcontainers-bom</artifactId>
@@ -81,10 +85,44 @@
         <scope>import</scope>
       </dependency>
 
+      <!-- MapStruct -->
+      <dependency>
+        <groupId>org.mapstruct</groupId>
+        <artifactId>mapstruct</artifactId>
+        <version>${mapstruct.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.mapstruct</groupId>
+        <artifactId>mapstruct-processor</artifactId>
+        <version>${mapstruct.version}</version>
+      </dependency>
+
+      <!-- SpringDoc OpenAPI -->
+      <dependency>
+        <groupId>org.springdoc</groupId>
+        <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        <version>${springdoc.version}</version>
+      </dependency>
+
+      <!-- Apache POI - Export CSV/Excel (reporting-service) -->
+      <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>${poi.version}</version>
+      </dependency>
+
+      <!-- iText 7 - Export PDF (reporting-service) -->
+      <dependency>
+        <groupId>com.itextpdf</groupId>
+        <artifactId>itext-core</artifactId>
+        <version>${itext.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
     </dependencies>
   </dependencyManagement>
 
-  <!-- ─── Plugins communs à tous les modules ───────────────────────────────── -->
   <build>
     <pluginManagement>
       <plugins>

@@ -186,6 +186,26 @@ services:
       start_period: 30s
 
   # ═══════════════════════════════════════════════════════════════
+  # REDIS — Cache Sprint 3
+  # ═══════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - cloudops-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
   # API GATEWAY
   # ═══════════════════════════════════════════════════════════════
   api-gateway:
@@ -199,24 +219,35 @@ services:
       - SPRING_PROFILES_ACTIVE=docker
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+      # Route 0 — Incident Service
       - SPRING_CLOUD_GATEWAY_ROUTES_0_ID=incident-service
       - SPRING_CLOUD_GATEWAY_ROUTES_0_URI=http://incident-service:8082
       - SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0=Path=/api/incidents/**
       - SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0=TokenRelay=
+      # Route 1 — Notification Service
       - SPRING_CLOUD_GATEWAY_ROUTES_1_ID=notification-service
       - SPRING_CLOUD_GATEWAY_ROUTES_1_URI=http://notification-service:8083
       - SPRING_CLOUD_GATEWAY_ROUTES_1_PREDICATES_0=Path=/api/notifications/**
       - SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_0=TokenRelay=
+      # Route 2 — WebSocket STOMP
       - SPRING_CLOUD_GATEWAY_ROUTES_2_ID=notification-websocket
       - SPRING_CLOUD_GATEWAY_ROUTES_2_URI=ws://notification-service:8083
       - SPRING_CLOUD_GATEWAY_ROUTES_2_PREDICATES_0=Path=/ws/**
       - SPRING_CLOUD_GATEWAY_ROUTES_2_FILTERS_0=TokenRelay=
+      # Route 3 — Reporting Service
+      - SPRING_CLOUD_GATEWAY_ROUTES_3_ID=reporting-service
+      - SPRING_CLOUD_GATEWAY_ROUTES_3_URI=http://reporting-service:8084
+      - SPRING_CLOUD_GATEWAY_ROUTES_3_PREDICATES_0=Path=/api/reporting/**
+      - SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_0=TokenRelay=
+      - SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_1=DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
     depends_on:
       keycloak:
         condition: service_started
       incident-service:
         condition: service_started
       notification-service:
+        condition: service_started
+      reporting-service:
         condition: service_started
     networks:
       - cloudops-network
@@ -244,9 +275,9 @@ services:
       - ORACLE_US_USERNAME=incidents_app
       - ORACLE_US_PASSWORD=AppIncidents2025
       - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=update      # ← update au lieu de validate
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_JPA_SHOW_SQL=true
-      - SPRING_FLYWAY_ENABLED=false               # ← Flyway désactivé
+      - SPRING_FLYWAY_ENABLED=false
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -286,8 +317,8 @@ services:
       - SPRING_DATASOURCE_PASSWORD=AppIncidents2025
       - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
       - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=update      # ← update au lieu de validate
-      - SPRING_FLYWAY_ENABLED=false               # ← Flyway désactivé
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_FLYWAY_ENABLED=false
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -314,6 +345,58 @@ services:
     networks:
       - cloudops-network
 
+  # ═══════════════════════════════════════════════════════════════
+  # REPORTING SERVICE — Sprint 3
+  # ═══════════════════════════════════════════════════════════════
+  reporting-service:
+    build:
+      context: .
+      dockerfile: reporting-service/Dockerfile
+    container_name: reporting-service
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=8084
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
+      - SPRING_DATASOURCE_USERNAME=incidents_app
+      - SPRING_DATASOURCE_PASSWORD=AppIncidents2025
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_FLYWAY_ENABLED=false
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_KAFKA_CONSUMER_GROUP_ID=reporting-service
+      - SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET=earliest
+      - SPRING_KAFKA_CONSUMER_KEY_DESERIALIZER=org.apache.kafka.common.serialization.StringDeserializer
+      - SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER=org.springframework.kafka.support.serializer.JsonDeserializer
+      - SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_JSON_TRUSTED_PACKAGES=io.cloudops.*
+      - SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_JSON_USE_TYPE_HEADERS=false
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_CACHE_TYPE=redis
+      - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
+    depends_on:
+      oracle-eu:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    networks:
+      - cloudops-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
 volumes:
   oracle-eu-data:
   oracle-af-data:
@@ -322,6 +405,7 @@ volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
+  redis-data:
 
 networks:
   cloudops-network:
