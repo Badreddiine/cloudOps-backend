@@ -57,14 +57,22 @@ jobs:
           cache: maven
 
       - name: Build JAR
+        if: matrix.service != 'reporting-service'
         run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
 
       - name: Build Docker image
         run: |
-          docker build \
-            -f ${{ matrix.service }}/Dockerfile \
-            -t ${{ matrix.service }}:scan \
-            ${{ matrix.service }}
+          if [ "${{ matrix.service }}" = "reporting-service" ]; then
+            docker build \
+              -f ${{ matrix.service }}/Dockerfile \
+              -t ${{ matrix.service }}:scan \
+              .
+          else
+            docker build \
+              -f ${{ matrix.service }}/Dockerfile \
+              -t ${{ matrix.service }}:scan \
+              ${{ matrix.service }}
+          fi
 
       - name: Scan image avec Trivy
         uses: aquasecurity/trivy-action@master
@@ -124,14 +132,22 @@ jobs:
           cache: maven
 
       - name: Build JAR
+        if: matrix.service != 'reporting-service'
         run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
 
       - name: Build Docker image
         run: |
-          docker build \
-            -f ${{ matrix.service }}/Dockerfile \
-            -t ${{ steps.meta.outputs.tags }} \
-            ${{ matrix.service }}
+          if [ "${{ matrix.service }}" = "reporting-service" ]; then
+            docker build \
+              -f ${{ matrix.service }}/Dockerfile \
+              -t ${{ steps.meta.outputs.tags }} \
+              .
+          else
+            docker build \
+              -f ${{ matrix.service }}/Dockerfile \
+              -t ${{ steps.meta.outputs.tags }} \
+              ${{ matrix.service }}
+          fi
 
       - name: Push to ECR
         run: docker push ${{ steps.meta.outputs.tags }}
