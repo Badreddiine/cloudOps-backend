@@ -13,6 +13,7 @@ COPY common/pom.xml                common/pom.xml
 COPY api-gateway/pom.xml           api-gateway/pom.xml
 COPY incident-service/pom.xml      incident-service/pom.xml
 COPY notification-service/pom.xml  notification-service/pom.xml
+COPY reporting-service/pom.xml     reporting-service/pom.xml
 
 # 3. Telecharger les dependances en cache
 RUN mvn dependency:go-offline -B
