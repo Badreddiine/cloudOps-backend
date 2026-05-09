@@ -49,12 +49,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build JAR (incident-service et notification-service uniquement)
+        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
+        run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
+
+      - name: Copier JAR dans le bon dossier
+        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
+        run: |
+          mkdir -p ${{ matrix.service }}/target
+          cp ${{ matrix.service }}/target/*.jar ${{ matrix.service }}/target/
+
       - name: Build Docker image
         run: |
           docker build \
             -f ${{ matrix.service }}/Dockerfile \
             -t ${{ matrix.service }}:scan \
-            .
+            ${{ matrix.service }}
 
       - name: Scan image avec Trivy
         uses: aquasecurity/trivy-action@master
@@ -106,12 +123,32 @@ jobs:
             type=sha,prefix=,suffix=,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build Docker image
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build JAR (incident-service et notification-service uniquement)
+        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
+        run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
+
+      - name: Build Docker image (multi-stage — contexte racine)
+        if: matrix.service == 'api-gateway' || matrix.service == 'reporting-service'
         run: |
           docker build \
             -f ${{ matrix.service }}/Dockerfile \
             -t ${{ steps.meta.outputs.tags }} \
             .
+
+      - name: Build Docker image (JAR externe — contexte service)
+        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
+        run: |
+          docker build \
+            -f ${{ matrix.service }}/Dockerfile \
+            -t ${{ steps.meta.outputs.tags }} \
+            ${{ matrix.service }}
 
       - name: Push to ECR
         run: docker push ${{ steps.meta.outputs.tags }}
