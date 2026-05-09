@@ -1,0 +1,44 @@
+global:
+  imageRegistry: ""       # ex: 123456789.dkr.ecr.eu-west-1.amazonaws.com
+  imageTag: "latest"
+  namespace: cloudops
+
+keycloakUrl: "https://auth.cloudops.io"
+realmName: "cloudops-realm"
+
+services:
+  apiGateway:
+    name: api-gateway
+    image: cloudops/api-gateway
+    port: 8080
+    replicas: 2
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits:   { cpu: 500m, memory: 1Gi }
+
+  incidentService:
+    name: incident-service
+    image: cloudops/incident-service
+    port: 8082
+    replicas: 2
+    resources:
+      requests: { cpu: 300m, memory: 512Mi }
+      limits:   { cpu: 600m, memory: 1Gi }
+
+  notificationService:
+    name: notification-service
+    image: cloudops/notification-service
+    port: 8083
+    replicas: 2
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits:   { cpu: 400m, memory: 768Mi }
+
+  reportingService:
+    name: reporting-service
+    image: cloudops/reporting-service
+    port: 8084
+    replicas: 2
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits:   { cpu: 400m, memory: 768Mi }

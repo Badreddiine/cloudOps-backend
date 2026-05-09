@@ -1,0 +1,105 @@
+# ── Helm Chart Keycloak Bitnami — valeurs production ──────────────────────────
+auth:
+  adminUser: admin
+  existingSecret: keycloak-admin-secret
+  passwordSecretKey: admin-password
+
+production: true
+proxy: edge
+
+tls:
+  enabled: false          # TLS terminé au niveau Ingress NGINX
+
+httpRelativePath: "/"
+
+extraEnvVars:
+  - name: KC_HOSTNAME
+    value: "auth.cloudops.io"
+  - name: KC_HOSTNAME_STRICT
+    value: "true"
+  - name: KC_HTTP_ENABLED
+    value: "true"
+  - name: KC_HEALTH_ENABLED
+    value: "true"
+  - name: KC_METRICS_ENABLED
+    value: "true"
+
+# ── Base de données externe RDS ───────────────────────────────────────────────
+postgresql:
+  enabled: false          # on utilise RDS, pas le PostgreSQL embarqué
+
+externalDatabase:
+  host: ""                # injecté via secret K8s
+  port: 5432
+  database: keycloak
+  existingSecret: keycloak-db-secret
+  existingSecretHostKey: host
+  existingSecretPortKey: port
+  existingSecretUserKey: username
+  existingSecretPasswordKey: password
+  existingSecretDatabaseKey: dbname
+
+# ── Ressources ────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+# ── Réplicas ──────────────────────────────────────────────────────────────────
+replicaCount: 2
+
+# ── Init container — import realm.json automatique ───────────────────────────
+initContainers:
+  - name: realm-import
+    image: busybox:1.36
+    command:
+      - sh
+      - -c
+      - |
+        echo "Copie du realm.json vers le volume partagé..."
+        cp /realm-config/realm.json /realm-import/realm.json
+        echo "realm.json copié avec succès."
+    volumeMounts:
+      - name: realm-config
+        mountPath: /realm-config
+      - name: realm-import
+        mountPath: /realm-import
+
+extraVolumes:
+  - name: realm-config
+    configMap:
+      name: keycloak-realm-config
+  - name: realm-import
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: realm-import
+    mountPath: /opt/bitnami/keycloak/data/import
+
+extraArgs: "--import-realm"
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  ports:
+    http: 8180
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: auth.cloudops.io
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+  tls: true
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring

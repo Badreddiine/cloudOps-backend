@@ -1,0 +1,12 @@
+global:
+  imageTag: "latest"
+
+services:
+  apiGateway:
+    replicas: 3
+  incidentService:
+    replicas: 3
+  notificationService:
+    replicas: 2
+  reportingService:
+    replicas: 2

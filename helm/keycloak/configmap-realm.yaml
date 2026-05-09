@@ -1,0 +1,9 @@
+# ConfigMap contenant le realm.json — appliqué avant le déploiement Keycloak
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm-config
+  namespace: keycloak
+data:
+  realm.json: |
+    PLACEHOLDER — remplace par le contenu de ton keycloak/realm.json

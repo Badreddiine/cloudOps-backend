@@ -1,0 +1,39 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: cloudops-incident-service
+    static_configs:
+      - targets: ["incident-service:8082"]
+    metrics_path: /actuator/prometheus
+
+  - job_name: cloudops-notification-service
+    static_configs:
+      - targets: ["notification-service:8083"]
+    metrics_path: /actuator/prometheus
+
+  - job_name: cloudops-reporting-service
+    static_configs:
+      - targets: ["reporting-service:8084"]
+    metrics_path: /actuator/prometheus
+
+  - job_name: cloudops-api-gateway
+    static_configs:
+      - targets: ["api-gateway:8080"]
+    metrics_path: /actuator/prometheus
+
+  - job_name: keycloak
+    static_configs:
+      - targets: ["keycloak:8180"]
+    metrics_path: /realms/cloudops-realm/metrics
+
+  - job_name: kafka-jmx
+    static_configs:
+      - targets: ["kafka-jmx-exporter:9404"]
+    metrics_path: /metrics

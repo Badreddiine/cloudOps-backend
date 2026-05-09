@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts
+  namespace: monitoring
+data:
+  alerts.yaml: |
+    groups:
+      - name: cloudops-alerts
+        rules:
+
+          # Pod down
+          - alert: PodDown
+            expr: kube_pod_status_phase{namespace="cloudops", phase="Failed"} == 1
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.pod }} est down"
+              description: "Le pod {{ $labels.pod }} est en état Failed depuis 1 minute"
+
+          # CPU > 80%
+          - alert: HighCPU
+            expr: |
+              sum(rate(container_cpu_usage_seconds_total{namespace="cloudops"}[5m]))
+              by (pod) / sum(kube_pod_container_resource_limits{resource="cpu", namespace="cloudops"})
+              by (pod) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "CPU élevé sur {{ $labels.pod }}"
+              description: "CPU > 80% depuis 5 minutes"
+
+          # SLA breach > 5 par heure
+          - alert: SLABreachHigh
+            expr: sum(increase(cloudops_sla_breach_total[1h])) > 5
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Trop de SLA breach"
+              description: "Plus de 5 incidents ont dépassé leur SLA en 1 heure"
+
+          # Keycloak indisponible
+          - alert: KeycloakDown
+            expr: up{job="keycloak"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Keycloak est indisponible"
+              description: "Keycloak ne répond plus depuis 1 minute — authentification impossible"
+
+          # Kafka consumer lag élevé
+          - alert: KafkaConsumerLagHigh
+            expr: sum(kafka_consumer_group_lag) by (group) > 1000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Kafka lag élevé — groupe {{ $labels.group }}"
+              description: "Le consumer lag dépasse 1000 messages depuis 5 minutes"

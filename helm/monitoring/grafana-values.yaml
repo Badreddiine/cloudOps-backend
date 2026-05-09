@@ -1,0 +1,70 @@
+# ── Grafana — dashboards CloudOps ────────────────────────────────────────────
+adminUser: admin
+adminPassword: "${GRAFANA_ADMIN_PASSWORD}"
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-kube-prometheus-prometheus:9090
+        isDefault: true
+      - name: Loki
+        type: loki
+        url: http://loki:3100
+      - name: Jaeger
+        type: jaeger
+        url: http://jaeger-query:16686
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: cloudops
+        folder: CloudOps
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards/cloudops
+
+dashboards:
+  cloudops:
+    jvm-overview:
+      gnetId: 4701
+      revision: 1
+      datasource: Prometheus
+    kafka-lag:
+      gnetId: 7589
+      revision: 1
+      datasource: Prometheus
+    kubernetes-pods:
+      gnetId: 6336
+      revision: 1
+      datasource: Prometheus
+
+dashboardsConfigMaps:
+  cloudops-custom: cloudops-dashboards
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - grafana.cloudops.io
+  tls:
+    - secretName: grafana-tls
+      hosts:
+        - grafana.cloudops.io
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+persistence:
+  enabled: true
+  size: 5Gi

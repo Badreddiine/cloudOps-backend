@@ -1,0 +1,69 @@
+# ── Prometheus — scraping JVM + Actuator + Kafka + Keycloak ──────────────────
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: "10GB"
+
+    # Scraping automatique via annotations pods
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+    additionalScrapeConfigs:
+      # JVM + Spring Actuator — tous les microservices
+      - job_name: cloudops-microservices
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [cloudops]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: service
+
+      # Kafka consumer lag via JMX Exporter
+      - job_name: kafka-consumer-lag
+        static_configs:
+          - targets: ["kafka-jmx-exporter:9404"]
+        metrics_path: /metrics
+
+      # Keycloak metrics
+      - job_name: keycloak
+        static_configs:
+          - targets: ["keycloak.keycloak.svc.cluster.local:8180"]
+        metrics_path: /realms/cloudops-realm/metrics
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+# ── Exporters ─────────────────────────────────────────────────────────────────
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+grafana:
+  enabled: false    # Grafana installé séparément

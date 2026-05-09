@@ -1,0 +1,32 @@
+# ── Loki — centralisation logs Kubernetes ────────────────────────────────────
+loki:
+  auth_enabled: false
+
+  storage:
+    type: filesystem
+
+  commonConfig:
+    replication_factor: 1
+
+  limits_config:
+    retention_period: 30d
+    ingestion_rate_mb: 10
+    ingestion_burst_size_mb: 20
+
+  server:
+    http_listen_port: 3100
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+  persistence:
+    enabled: true
+    size: 20Gi
+
+singleBinary:
+  replicas: 1

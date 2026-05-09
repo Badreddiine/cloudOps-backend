@@ -1,0 +1,46 @@
+
+# ── Promtail — collecte logs pods → Loki ─────────────────────────────────────
+config:
+  logLevel: info
+  serverPort: 3101
+
+  clients:
+    - url: http://loki:3100/loki/api/v1/push
+
+  snippets:
+    pipelineStages:
+      - docker: {}
+      - match:
+          selector: '{namespace="cloudops"}'
+          stages:
+            - regex:
+                expression: '.*level=(?P<level>[a-zA-Z]+).*'
+            - labels:
+                level:
+
+    scrapeConfigs: |
+      - job_name: cloudops-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [cloudops, keycloak]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule

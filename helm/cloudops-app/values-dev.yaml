@@ -1,0 +1,12 @@
+global:
+  imageTag: "develop"
+
+services:
+  apiGateway:
+    replicas: 1
+  incidentService:
+    replicas: 1
+  notificationService:
+    replicas: 1
+  reportingService:
+    replicas: 1

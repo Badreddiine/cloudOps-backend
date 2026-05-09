@@ -1,0 +1,12 @@
+global:
+  imageTag: "staging"
+
+services:
+  apiGateway:
+    replicas: 2
+  incidentService:
+    replicas: 2
+  notificationService:
+    replicas: 1
+  reportingService:
+    replicas: 1

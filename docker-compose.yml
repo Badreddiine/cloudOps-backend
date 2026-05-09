@@ -117,6 +117,7 @@ services:
       - KC_HTTP_ENABLED=true
       - KC_HTTP_PORT=8180
       - KC_HEALTH_ENABLED=true
+      - KC_METRICS_ENABLED=true
     ports:
       - "8180:8180"
     volumes:
@@ -163,6 +164,7 @@ services:
     ports:
       - "9092:9092"
       - "29092:29092"
+      - "9999:9999"   # JMX
     environment:
       - KAFKA_BROKER_ID=1
       - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
@@ -171,6 +173,8 @@ services:
       - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
       - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
       - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+      - KAFKA_JMX_PORT=9999
+      - KAFKA_JMX_HOSTNAME=kafka
     volumes:
       - kafka-data:/var/lib/kafka/data
     depends_on:
@@ -184,6 +188,23 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+
+  # ═══════════════════════════════════════════════════════════════
+  # KAFKA JMX EXPORTER — consumer lag → Prometheus
+  # ═══════════════════════════════════════════════════════════════
+  kafka-jmx-exporter:
+    image: bitnami/jmx-exporter:0.20.0
+    container_name: kafka-jmx-exporter
+    ports:
+      - "9404:9404"
+    volumes:
+      - ./kafka/jmx-exporter-config.yml:/opt/bitnami/jmx-exporter/config.yml
+    networks:
+      - cloudops-network
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
 
   # ═══════════════════════════════════════════════════════════════
   # REDIS — Cache Sprint 3
@@ -240,6 +261,17 @@ services:
       - SPRING_CLOUD_GATEWAY_ROUTES_3_PREDICATES_0=Path=/api/reporting/**
       - SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_0=TokenRelay=
       - SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_1=DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      # Actuator
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      # OTEL Tracing
+      - OTEL_SERVICE_NAME=api-gateway
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_TRACES_EXPORTER=otlp
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: /actuator/prometheus
+      prometheus.io/port: "8080"
     depends_on:
       keycloak:
         condition: service_started
@@ -285,6 +317,17 @@ services:
       - SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER=org.springframework.kafka.support.serializer.JsonSerializer
       - SPRING_KAFKA_PRODUCER_PROPERTIES_SPRING_JSON_ADD_TYPE_HEADERS=false
       - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
+      # Actuator + Prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      # OTEL Tracing
+      - OTEL_SERVICE_NAME=incident-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_TRACES_EXPORTER=otlp
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: /actuator/prometheus
+      prometheus.io/port: "8082"
     depends_on:
       oracle-eu:
         condition: service_healthy
@@ -335,6 +378,17 @@ services:
       - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
       - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
       - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
+      # Actuator + Prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      # OTEL Tracing
+      - OTEL_SERVICE_NAME=notification-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_TRACES_EXPORTER=otlp
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: /actuator/prometheus
+      prometheus.io/port: "8083"
     depends_on:
       oracle-eu:
         condition: service_healthy
@@ -378,6 +432,17 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_CACHE_TYPE=redis
       - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
+      # Actuator + Prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      # OTEL Tracing
+      - OTEL_SERVICE_NAME=reporting-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_TRACES_EXPORTER=otlp
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: /actuator/prometheus
+      prometheus.io/port: "8084"
     depends_on:
       oracle-eu:
         condition: service_healthy
@@ -397,6 +462,134 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # ═══════════════════════════════════════════════════════════════
+  # PROMETHEUS
+  # ═══════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./helm/monitoring/prometheus-docker.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=10GB
+      - --web.enable-lifecycle
+    networks:
+      - cloudops-network
+    depends_on:
+      - kafka-jmx-exporter
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # GRAFANA
+  # ═══════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/cloudops/cloudops-dashboard.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./helm/monitoring/dashboards:/var/lib/grafana/dashboards/cloudops:ro
+      - ./helm/monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - cloudops-network
+
+    depends_on:
+        prometheus:
+          condition: service_healthy
+        loki:
+          condition: service_healthy
+        jaeger:
+          condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # LOKI — centralisation logs
+  # ═══════════════════════════════════════════════════════════════
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./helm/monitoring/loki-docker.yml:/etc/loki/loki-docker.yml:ro
+    command: -config.file=/etc/loki/loki-docker.yml
+    networks:
+      - cloudops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # PROMTAIL — collecte logs Docker → Loki
+  # ═══════════════════════════════════════════════════════════════
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./helm/monitoring/promtail-docker.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - cloudops-network
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # JAEGER — tracing distribué (all-in-one)
+  # ═══════════════════════════════════════════════════════════════
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: jaeger
+    ports:
+      - "16686:16686"   # UI Jaeger
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+      - "14250:14250"   # gRPC collector
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+    networks:
+      - cloudops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:16686/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+# ═══════════════════════════════════════════════════════════════
+# VOLUMES
+# ═══════════════════════════════════════════════════════════════
 volumes:
   oracle-eu-data:
   oracle-af-data:
@@ -406,7 +599,13 @@ volumes:
   zookeeper-logs:
   kafka-data:
   redis-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
 
+# ═══════════════════════════════════════════════════════════════
+# NETWORKS
+# ═══════════════════════════════════════════════════════════════
 networks:
   cloudops-network:
     driver: bridge

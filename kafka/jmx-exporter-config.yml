@@ -1,0 +1,46 @@
+hostPort: kafka:9999
+startDelaySeconds: 30
+ssl: false
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+rules:
+  # Consumer group lag
+  - pattern: kafka.consumer<type=consumer-fetch-manager-metrics, client-id=(.+)><>records-lag-max
+    name: kafka_consumer_records_lag_max
+    labels:
+      client_id: "$1"
+
+  # Partitions assignées
+  - pattern: kafka.consumer<type=consumer-coordinator-metrics, client-id=(.+)><>assigned-partitions
+    name: kafka_consumer_assigned_partitions
+    labels:
+      client_id: "$1"
+
+  # Messages produits par seconde
+  - pattern: kafka.producer<type=producer-metrics, client-id=(.+)><>record-send-rate
+    name: kafka_producer_record_send_rate
+    labels:
+      client_id: "$1"
+
+  # Taux d'erreur producteur
+  - pattern: kafka.producer<type=producer-metrics, client-id=(.+)><>record-error-rate
+    name: kafka_producer_record_error_rate
+    labels:
+      client_id: "$1"
+
+  # Broker — messages entrants
+  - pattern: kafka.server<type=BrokerTopicMetrics, name=MessagesInPerSec><>OneMinuteRate
+    name: kafka_server_messages_in_per_sec
+
+  # Broker — bytes entrants
+  - pattern: kafka.server<type=BrokerTopicMetrics, name=BytesInPerSec><>OneMinuteRate
+    name: kafka_server_bytes_in_per_sec
+
+  # Consumer lag par groupe et topic
+  - pattern: kafka.server<type=FetcherLagMetrics, name=ConsumerLag, clientId=(.+), topic=(.+), partition=(.+)><>Value
+    name: kafka_consumer_group_lag
+    labels:
+      client_id: "$1"
+      topic: "$2"
+      partition: "$3"
