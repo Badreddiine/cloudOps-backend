@@ -49,31 +49,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-          cache: maven
-
-      - name: Build JAR (incident-service et notification-service uniquement)
-        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
-        run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
-
       - name: Build Docker image
         run: |
-          if [ "${{ matrix.service }}" = "api-gateway" ] || [ "${{ matrix.service }}" = "reporting-service" ]; then
-            docker build \
-              -f ${{ matrix.service }}/Dockerfile \
-              -t ${{ matrix.service }}:scan \
-              ${{ github.workspace }}
-          else
-            docker build \
-              -f ${{ github.workspace }}/${{ matrix.service }}/Dockerfile \
-              -t ${{ matrix.service }}:scan \
-              ${{ github.workspace }}/${{ matrix.service }}
-          fi
+          docker build \
+            -f ${{ matrix.service }}/Dockerfile \
+            -t ${{ matrix.service }}:scan \
+            .
 
       - name: Scan image avec Trivy
         uses: aquasecurity/trivy-action@master
@@ -125,31 +106,12 @@ jobs:
             type=sha,prefix=,suffix=,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Setup Java
-        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-          cache: maven
-
-      - name: Build JAR (incident-service et notification-service uniquement)
-        if: matrix.service == 'incident-service' || matrix.service == 'notification-service'
-        run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
-
       - name: Build Docker image
         run: |
-          if [ "${{ matrix.service }}" = "api-gateway" ] || [ "${{ matrix.service }}" = "reporting-service" ]; then
-            docker build \
-              -f ${{ matrix.service }}/Dockerfile \
-              -t ${{ steps.meta.outputs.tags }} \
-              ${{ github.workspace }}
-          else
-            docker build \
-              -f ${{ github.workspace }}/${{ matrix.service }}/Dockerfile \
-              -t ${{ steps.meta.outputs.tags }} \
-              ${{ github.workspace }}/${{ matrix.service }}
-          fi
+          docker build \
+            -f ${{ matrix.service }}/Dockerfile \
+            -t ${{ steps.meta.outputs.tags }} \
+            .
 
       - name: Push to ECR
         run: docker push ${{ steps.meta.outputs.tags }}
