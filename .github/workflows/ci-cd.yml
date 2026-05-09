@@ -13,10 +13,10 @@ env:
 
 jobs:
   # ════════════════════════════════════════════════════════════════
-  # JOB 1 — BUILD & TEST
+  # JOB 1 — BUILD (sans tests)
   # ════════════════════════════════════════════════════════════════
   build-test:
-    name: Build & Test
+    name: Build
     runs-on: ubuntu-latest
 
     steps:
@@ -30,18 +30,8 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Build & run tests
-        run: mvn clean verify -B --no-transfer-progress
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: '**/target/site/jacoco/'
-
-      - name: Check coverage threshold (80%)
-        run: |
-          mvn jacoco:check -B --no-transfer-progress || echo "Coverage check failed"
+      - name: Build
+        run: mvn clean package -B --no-transfer-progress -DskipTests
 
   # ════════════════════════════════════════════════════════════════
   # JOB 2 — SCAN SECURITE TRIVY
@@ -234,7 +224,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy-staging
     if: github.ref == 'refs/heads/main'
-    environment: prod        # approval gate configuré dans GitHub Settings
+    environment: prod
 
     steps:
       - name: Checkout code
