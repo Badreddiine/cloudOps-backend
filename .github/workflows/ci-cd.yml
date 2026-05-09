@@ -64,7 +64,7 @@ jobs:
           docker build \
             -f ${{ matrix.service }}/Dockerfile \
             -t ${{ matrix.service }}:scan \
-            .
+            ${{ matrix.service }}
 
       - name: Scan image avec Trivy
         uses: aquasecurity/trivy-action@master
@@ -131,7 +131,7 @@ jobs:
           docker build \
             -f ${{ matrix.service }}/Dockerfile \
             -t ${{ steps.meta.outputs.tags }} \
-            .
+            ${{ matrix.service }}
 
       - name: Push to ECR
         run: docker push ${{ steps.meta.outputs.tags }}
