@@ -5,17 +5,24 @@ FROM maven:3.9.6-eclipse-temurin-17 AS builder
 
 WORKDIR /app
 
+# POM parent
 COPY pom.xml .
+
+# POMs de TOUS les modules (requis par le pom parent)
 COPY common/pom.xml                common/pom.xml
+COPY api-gateway/pom.xml           api-gateway/pom.xml
 COPY incident-service/pom.xml      incident-service/pom.xml
 COPY notification-service/pom.xml  notification-service/pom.xml
-COPY api-gateway/pom.xml           api-gateway/pom.xml
+COPY reporting-service/pom.xml     reporting-service/pom.xml
 
+# Télécharger les dépendances
 RUN mvn dependency:go-offline -B
 
+# Copier les sources nécessaires uniquement
 COPY common/src           common/src
 COPY incident-service/src incident-service/src
 
+# Builder
 RUN mvn clean package -Dmaven.test.skip=true -B \
     -pl incident-service -am
 
