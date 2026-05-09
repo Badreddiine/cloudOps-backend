@@ -56,12 +56,15 @@ jobs:
           distribution: temurin
           cache: maven
 
+      - name: Build JAR
+        run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
+
       - name: Build Docker image
         run: |
           docker build \
             -f ${{ matrix.service }}/Dockerfile \
             -t ${{ matrix.service }}:scan \
-            .
+            ${{ matrix.service }}
 
       - name: Scan image avec Trivy
         uses: aquasecurity/trivy-action@master
@@ -120,12 +123,15 @@ jobs:
           distribution: temurin
           cache: maven
 
+      - name: Build JAR
+        run: mvn clean package -B --no-transfer-progress -DskipTests -pl ${{ matrix.service }} -am
+
       - name: Build Docker image
         run: |
           docker build \
             -f ${{ matrix.service }}/Dockerfile \
             -t ${{ steps.meta.outputs.tags }} \
-            .
+            ${{ matrix.service }}
 
       - name: Push to ECR
         run: docker push ${{ steps.meta.outputs.tags }}
