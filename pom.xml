@@ -37,6 +37,7 @@
     <!-- Surcharge Spring Security pour corriger CVE-2025-41232 et CVE-2026-22732 -->
     <spring-security.version>6.5.9</spring-security.version>
     <tomcat.version>10.1.55</tomcat.version>
+    <thymeleaf.version>3.1.5.RELEASE</thymeleaf.version>
   </properties>
 
   <dependencyManagement>
