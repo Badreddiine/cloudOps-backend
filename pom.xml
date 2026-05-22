@@ -34,6 +34,8 @@
     <itext.version>8.0.5</itext.version>
     <mapstruct.version>1.5.5.Final</mapstruct.version>
     <springdoc.version>2.6.0</springdoc.version>
+    <!-- Surcharge Spring Security pour corriger CVE-2025-41232 et CVE-2026-22732 -->
+    <spring-security.version>6.5.9</spring-security.version>
   </properties>
 
   <dependencyManagement>
