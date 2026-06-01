@@ -53,20 +53,24 @@ public class IncidentEventProducer {
     public void fallbackCreated(IncidentCreatedEvent event, Exception e) {
         log.error("[CB] Kafka unavailable - CREATED event lost for incidentId={} : {}",
                 event.getIncidentId(), e.getMessage());
+        // TODO : Outbox Pattern → persister en DB pour rejeu ultérieur
     }
 
     public void fallbackUpdated(IncidentUpdatedEvent event, Exception e) {
         log.error("[CB] Kafka unavailable - UPDATED event lost for incidentId={} : {}",
                 event.getIncidentId(), e.getMessage());
+        // TODO : Outbox Pattern → persister en DB pour rejeu ultérieur
     }
 
     public void fallbackResolved(IncidentResolvedEvent event, Exception e) {
         log.error("[CB] Kafka unavailable - RESOLVED event lost for incidentId={} : {}",
                 event.getIncidentId(), e.getMessage());
+        // TODO : Outbox Pattern → persister en DB pour rejeu ultérieur
     }
 
     public void fallbackSla(SlaBreachEvent event, Exception e) {
         log.error("[CB] Kafka unavailable - SLA BREACH event lost for incidentId={} : {}",
                 event.getIncidentId(), e.getMessage());
+        // TODO : Outbox Pattern → persister en DB pour rejeu ultérieur
     }
 }

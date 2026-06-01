@@ -4,7 +4,7 @@ services:
   # ORACLE XE EU — PRIMARY
   # ═══════════════════════════════════════════════════════════════
   oracle-eu:
-    image: gvenzl/oracle-xe:21-slim
+    image: gvenzl/oracle-xe:21-full
     container_name: oracle-eu-primary
     environment:
       - ORACLE_PASSWORD=CloudOps2025
@@ -19,23 +19,25 @@ services:
     networks:
       - cloudops-network
     healthcheck:
-      test: ["CMD-SHELL", "healthcheck.sh"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 120s
+      test: ["CMD-SHELL", "/opt/oracle/healthcheck.sh"]
+      interval: 20s
+      timeout: 15s
+      retries: 40
+      start_period: 300s
 
   # ═══════════════════════════════════════════════════════════════
   # ORACLE XE AF — STANDBY Afrique
   # ═══════════════════════════════════════════════════════════════
   oracle-af:
-    image: gvenzl/oracle-xe:21-slim
+    image: gvenzl/oracle-xe:21-full
     container_name: oracle-af-standby
     environment:
       - ORACLE_PASSWORD=CloudOps2025
       - ORACLE_DATABASE=CLOUDOPSAF
       - APP_USER=incidents_app
       - APP_USER_PASSWORD=AppIncidents2025
+      - ORACLE_SGA_TARGET=512m
+      - ORACLE_PGA_AGGREGATE_TARGET=256m
     ports:
       - "1522:1521"
     volumes:
@@ -46,23 +48,25 @@ services:
       oracle-eu:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "healthcheck.sh"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 120s
+      test: ["CMD-SHELL", "/opt/oracle/healthcheck.sh"]
+      interval: 20s
+      timeout: 15s
+      retries: 40
+      start_period: 360s
 
   # ═══════════════════════════════════════════════════════════════
   # ORACLE XE US — STANDBY Amerique
   # ═══════════════════════════════════════════════════════════════
   oracle-us:
-    image: gvenzl/oracle-xe:21-slim
+    image: gvenzl/oracle-xe:21-full
     container_name: oracle-us-standby
     environment:
       - ORACLE_PASSWORD=CloudOps2025
       - ORACLE_DATABASE=CLOUDOPSUS
       - APP_USER=incidents_app
       - APP_USER_PASSWORD=AppIncidents2025
+      - ORACLE_SGA_TARGET=512m
+      - ORACLE_PGA_AGGREGATE_TARGET=256m
     ports:
       - "1523:1521"
     volumes:
@@ -72,12 +76,14 @@ services:
     depends_on:
       oracle-eu:
         condition: service_healthy
+      oracle-af:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "healthcheck.sh"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 120s
+      test: ["CMD-SHELL", "/opt/oracle/healthcheck.sh"]
+      interval: 20s
+      timeout: 15s
+      retries: 40
+      start_period: 360s
 
   # ═══════════════════════════════════════════════════════════════
   # KEYCLOAK DB — PostgreSQL
@@ -93,11 +99,13 @@ services:
       - keycloak-data:/var/lib/postgresql/data
     networks:
       - cloudops-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 60s
 
   # ═══════════════════════════════════════════════════════════════
   # KEYCLOAK
@@ -127,12 +135,13 @@ services:
         condition: service_healthy
     networks:
       - cloudops-network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8180/health/live"]
-      interval: 15s
-      timeout: 10s
-      retries: 15
-      start_period: 60s
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8180 && echo -e 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 'UP'"]
+      interval: 20s
+      timeout: 15s
+      retries: 30
+      start_period: 180s
 
   # ═══════════════════════════════════════════════════════════════
   # ZOOKEEPER
@@ -141,19 +150,25 @@ services:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
     environment:
-      - ZOOKEEPER_CLIENT_PORT=2181
-      - ZOOKEEPER_TICK_TIME=2000
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 4000
+      KAFKA_OPTS: "-Dzookeeper.forceSync=no"
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
     networks:
       - cloudops-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "2181"]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 10s
       retries: 10
-      start_period: 20s
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
 
   # ═══════════════════════════════════════════════════════════════
   # KAFKA
@@ -164,7 +179,7 @@ services:
     ports:
       - "9092:9092"
       - "29092:29092"
-      - "9999:9999"   # JMX
+      - "9999:9999"
     environment:
       - KAFKA_BROKER_ID=1
       - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
@@ -182,18 +197,19 @@ services:
         condition: service_healthy
     networks:
       - cloudops-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 10s
+      interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 30s
+      retries: 15
+      start_period: 60s
 
   # ═══════════════════════════════════════════════════════════════
-  # KAFKA JMX EXPORTER — consumer lag → Prometheus
+  # KAFKA JMX EXPORTER
   # ═══════════════════════════════════════════════════════════════
   kafka-jmx-exporter:
-    image: bitnami/jmx-exporter:0.20.0
+    image: bitnami/jmx-exporter:latest
     container_name: kafka-jmx-exporter
     ports:
       - "9404:9404"
@@ -207,7 +223,7 @@ services:
     restart: unless-stopped
 
   # ═══════════════════════════════════════════════════════════════
-  # REDIS — Cache Sprint 3
+  # REDIS
   # ═══════════════════════════════════════════════════════════════
   redis:
     image: redis:7-alpine
@@ -219,70 +235,12 @@ services:
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     networks:
       - cloudops-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-    restart: unless-stopped
-
-  # ═══════════════════════════════════════════════════════════════
-  # API GATEWAY
-  # ═══════════════════════════════════════════════════════════════
-  api-gateway:
-    build:
-      context: .
-      dockerfile: api-gateway/Dockerfile
-    container_name: api-gateway
-    ports:
-      - "8080:8080"
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
-      # Route 0 — Incident Service
-      - SPRING_CLOUD_GATEWAY_ROUTES_0_ID=incident-service
-      - SPRING_CLOUD_GATEWAY_ROUTES_0_URI=http://incident-service:8082
-      - SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0=Path=/api/incidents/**
-      - SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0=TokenRelay=
-      # Route 1 — Notification Service
-      - SPRING_CLOUD_GATEWAY_ROUTES_1_ID=notification-service
-      - SPRING_CLOUD_GATEWAY_ROUTES_1_URI=http://notification-service:8083
-      - SPRING_CLOUD_GATEWAY_ROUTES_1_PREDICATES_0=Path=/api/notifications/**
-      - SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_0=TokenRelay=
-      # Route 2 — WebSocket STOMP
-      - SPRING_CLOUD_GATEWAY_ROUTES_2_ID=notification-websocket
-      - SPRING_CLOUD_GATEWAY_ROUTES_2_URI=ws://notification-service:8083
-      - SPRING_CLOUD_GATEWAY_ROUTES_2_PREDICATES_0=Path=/ws/**
-      - SPRING_CLOUD_GATEWAY_ROUTES_2_FILTERS_0=TokenRelay=
-      # Route 3 — Reporting Service
-      - SPRING_CLOUD_GATEWAY_ROUTES_3_ID=reporting-service
-      - SPRING_CLOUD_GATEWAY_ROUTES_3_URI=http://reporting-service:8084
-      - SPRING_CLOUD_GATEWAY_ROUTES_3_PREDICATES_0=Path=/api/reporting/**
-      - SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_0=TokenRelay=
-      - SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_1=DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-      # Actuator
-      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
-      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
-      # OTEL Tracing
-      - OTEL_SERVICE_NAME=api-gateway
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-      - OTEL_TRACES_EXPORTER=otlp
-    labels:
-      prometheus.io/scrape: "true"
-      prometheus.io/path: /actuator/prometheus
-      prometheus.io/port: "8080"
-    depends_on:
-      keycloak:
-        condition: service_started
-      incident-service:
-        condition: service_started
-      notification-service:
-        condition: service_started
-      reporting-service:
-        condition: service_started
-    networks:
-      - cloudops-network
 
   # ═══════════════════════════════════════════════════════════════
   # INCIDENT SERVICE
@@ -317,10 +275,15 @@ services:
       - SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER=org.springframework.kafka.support.serializer.JsonSerializer
       - SPRING_KAFKA_PRODUCER_PROPERTIES_SPRING_JSON_ADD_TYPE_HEADERS=false
       - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
-      # Actuator + Prometheus
-      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=*
       - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
-      # OTEL Tracing
+      - MANAGEMENT_SERVER_PORT=8090
+      - MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true
+      - MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED=true
+      - MANAGEMENT_HEALTH_READINESSSTATE_ENABLED=true
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_SECURITY_ENABLED=false
+      - SPRING_SECURITY_IGNORE=/actuator/**
       - OTEL_SERVICE_NAME=incident-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_TRACES_EXPORTER=otlp
@@ -335,12 +298,17 @@ services:
         condition: service_healthy
       oracle-us:
         condition: service_healthy
-      keycloak:
-        condition: service_started
       kafka:
         condition: service_healthy
     networks:
       - cloudops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 1F9A /proc/net/tcp6 || grep -q 1F9A /proc/net/tcp"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
   # ═══════════════════════════════════════════════════════════════
   # NOTIFICATION SERVICE
@@ -378,10 +346,15 @@ services:
       - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
       - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
       - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
-      # Actuator + Prometheus
-      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=*
       - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
-      # OTEL Tracing
+      - MANAGEMENT_SERVER_PORT=8090
+      - MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true
+      - MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED=true
+      - MANAGEMENT_HEALTH_READINESSSTATE_ENABLED=true
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_SECURITY_ENABLED=false
+      - SPRING_SECURITY_IGNORE=/actuator/**
       - OTEL_SERVICE_NAME=notification-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_TRACES_EXPORTER=otlp
@@ -392,15 +365,20 @@ services:
     depends_on:
       oracle-eu:
         condition: service_healthy
-      keycloak:
-        condition: service_started
       kafka:
         condition: service_healthy
     networks:
       - cloudops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 1F9A /proc/net/tcp6 || grep -q 1F9A /proc/net/tcp"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
   # ═══════════════════════════════════════════════════════════════
-  # REPORTING SERVICE — Sprint 3
+  # REPORTING SERVICE
   # ═══════════════════════════════════════════════════════════════
   reporting-service:
     build:
@@ -432,10 +410,15 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_CACHE_TYPE=redis
       - LOGGING_LEVEL_IO_CLOUDOPS=DEBUG
-      # Actuator + Prometheus
-      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=*
       - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
-      # OTEL Tracing
+      - MANAGEMENT_SERVER_PORT=8090
+      - MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true
+      - MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED=true
+      - MANAGEMENT_HEALTH_READINESSSTATE_ENABLED=true
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_SECURITY_ENABLED=false
+      - SPRING_SECURITY_IGNORE=/actuator/**
       - OTEL_SERVICE_NAME=reporting-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
       - OTEL_TRACES_EXPORTER=otlp
@@ -450,17 +433,64 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      keycloak:
-        condition: service_started
     networks:
       - cloudops-network
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8084/actuator/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 1F9A /proc/net/tcp6 || grep -q 1F9A /proc/net/tcp"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ═══════════════════════════════════════════════════════════════
+  # API GATEWAY
+  # ═══════════════════════════════════════════════════════════════
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=*
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_SERVER_PORT=8090
+      - MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED=true
+      - MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED=true
+      - MANAGEMENT_HEALTH_READINESSSTATE_ENABLED=true
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+      - MANAGEMENT_SECURITY_ENABLED=false
+      - SPRING_SECURITY_IGNORE=/actuator/**
+      - OTEL_SERVICE_NAME=api-gateway
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_TRACES_EXPORTER=otlp
+    labels:
+      prometheus.io/scrape: "true"
+      prometheus.io/path: /actuator/prometheus
+      prometheus.io/port: "8080"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      incident-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      reporting-service:
+        condition: service_healthy
+    networks:
+      - cloudops-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 1F9A /proc/net/tcp6 || grep -q 1F9A /proc/net/tcp"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   # ═══════════════════════════════════════════════════════════════
   # PROMETHEUS
@@ -491,45 +521,12 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════════════════════════
-  # GRAFANA
-  # ═══════════════════════════════════════════════════════════════
-  grafana:
-    image: grafana/grafana:10.3.0
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/cloudops/cloudops-dashboard.json
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./helm/monitoring/dashboards:/var/lib/grafana/dashboards/cloudops:ro
-      - ./helm/monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
-    networks:
-      - cloudops-network
-
-    depends_on:
-        prometheus:
-          condition: service_healthy
-        loki:
-          condition: service_healthy
-        jaeger:
-          condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-
-  # ═══════════════════════════════════════════════════════════════
-  # LOKI — centralisation logs
+  # LOKI
   # ═══════════════════════════════════════════════════════════════
   loki:
     image: grafana/loki:2.9.4
     container_name: loki
+    user: "root"
     ports:
       - "3100:3100"
     volumes:
@@ -546,7 +543,7 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════════════════════════
-  # PROMTAIL — collecte logs Docker → Loki
+  # PROMTAIL
   # ═══════════════════════════════════════════════════════════════
   promtail:
     image: grafana/promtail:2.9.4
@@ -565,16 +562,16 @@ services:
     restart: unless-stopped
 
   # ═══════════════════════════════════════════════════════════════
-  # JAEGER — tracing distribué (all-in-one)
+  # JAEGER
   # ═══════════════════════════════════════════════════════════════
   jaeger:
     image: jaegertracing/all-in-one:1.52
     container_name: jaeger
     ports:
-      - "16686:16686"   # UI Jaeger
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
-      - "14250:14250"   # gRPC collector
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+      - "14250:14250"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
       - SPAN_STORAGE_TYPE=memory
@@ -583,6 +580,39 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:16686/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # GRAFANA
+  # ═══════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/cloudops/cloudops-dashboard.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./helm/monitoring/dashboards:/var/lib/grafana/dashboards/cloudops:ro
+      - ./helm/monitoring/grafana-provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - cloudops-network
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 5

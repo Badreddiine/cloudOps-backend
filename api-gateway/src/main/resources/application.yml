@@ -5,6 +5,11 @@ spring:
   application:
     name: api-gateway
 
+  # Configuration par défaut (Docker)
+  config:
+    activate:
+      on-profile: docker
+
   security:
     oauth2:
       resourceserver:
@@ -14,19 +19,19 @@ spring:
   cloud:
     gateway:
       globalcors:
+        # TRÈS IMPORTANT : Permet de gérer les requêtes OPTIONS (Preflight) automatiquement
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
-            allowedOrigins:
-              - "http://localhost:3000"
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
             allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
+              - "*"
             allowedHeaders:
               - "*"
             allowCredentials: true
+            maxAge: 3600
 
       routes:
         # ─── Reporting Service ────────────────────────────────────────────
@@ -36,6 +41,8 @@ spring:
             - Path=/api/reporting/**
           filters:
             - TokenRelay=
+            # RETAIN_FIRST évite d'avoir des doublons d'headers CORS si le microservice en envoie aussi
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials RETAIN_FIRST
           metadata:
             response-timeout: 30000
             connect-timeout: 5000
@@ -47,6 +54,7 @@ spring:
             - Path=/api/incidents/**
           filters:
             - TokenRelay=
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials RETAIN_FIRST
 
         # ─── Notification Service ─────────────────────────────────────────
         - id: notification-service
@@ -55,8 +63,9 @@ spring:
             - Path=/api/notifications/**
           filters:
             - TokenRelay=
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials RETAIN_FIRST
 
-        # ─── WebSocket STOMP (notifications temps reel) ───────────────────
+        # ─── WebSocket STOMP ──────────────────────────────────────────────
         - id: notification-websocket
           uri: ws://notification-service:8083
           predicates:
@@ -72,6 +81,9 @@ logging:
     reactor.netty: DEBUG
 
 ---
+# ═══════════════════════════════════════════════════════════════
+# PROFIL LOCAL — Next.js sur 3000/3001, services sur localhost
+# ═══════════════════════════════════════════════════════════════
 spring:
   config:
     activate:
@@ -86,49 +98,44 @@ spring:
   cloud:
     gateway:
       globalcors:
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
-            allowedOrigins:
-              - "http://localhost:3000"
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
             allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
+              - "*"
             allowedHeaders:
               - "*"
             allowCredentials: true
+            maxAge: 3600
 
       routes:
-        # ─── Reporting Service ────────────────────────────────────────────
         - id: reporting-service
           uri: http://localhost:8084
           predicates:
             - Path=/api/reporting/**
           filters:
             - TokenRelay=
-          metadata:
-            response-timeout: 30000
-            connect-timeout: 5000
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials RETAIN_FIRST
 
-        # ─── Incident Service ─────────────────────────────────────────────
         - id: incident-service
           uri: http://localhost:8082
           predicates:
             - Path=/api/incidents/**
           filters:
             - TokenRelay=
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials RETAIN_FIRST
 
-        # ─── Notification Service ─────────────────────────────────────────
         - id: notification-service
           uri: http://localhost:8083
           predicates:
             - Path=/api/notifications/**
           filters:
             - TokenRelay=
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials RETAIN_FIRST
 
-        # ─── WebSocket STOMP (notifications temps reel) ───────────────────
         - id: notification-websocket
           uri: ws://localhost:8083
           predicates:

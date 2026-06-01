@@ -12,6 +12,13 @@ target/
 *.iws
 *.iml
 *.ipr
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
+*.auto.tfvars
+.terraform.lock.hcl
 
 ### Eclipse ###
 .apt_generated

@@ -1,4 +1,5 @@
 package io.cloudops.incidentservice.service;
+// WRONG IMPORT FOR THE PRODUCER
 
 import io.cloudops.incidentservice.dto.request.CreateIncidentRequest;
 import io.cloudops.incidentservice.dto.request.UpdateIncidentRequest;
@@ -8,6 +9,7 @@ import io.cloudops.incidentservice.entity.Incident;
 import io.cloudops.incidentservice.entity.IncidentStatus;
 import io.cloudops.incidentservice.exception.IncidentNotFoundException;
 import io.cloudops.incidentservice.factory.IncidentFactory;
+import io.cloudops.incidentservice.kafka.IncidentEventProducer;
 import io.cloudops.incidentservice.mapper.IncidentMapper;
 import io.cloudops.incidentservice.repository.AuditLogRepository;
 import io.cloudops.incidentservice.repository.IncidentRepository;
@@ -16,7 +18,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+// CORRECT IMPORTS
+import io.cloudops.event.IncidentCreatedEvent;
+import io.cloudops.event.IncidentResolvedEvent;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -27,11 +31,14 @@ import java.util.stream.Collectors;
 @Slf4j
 public class IncidentServiceImpl implements IncidentService {
 
-    private final IncidentRepository incidentRepository;
-    private final AuditLogRepository auditLogRepository;
-    private final IncidentMapper incidentMapper;
-    private final IncidentFactory incidentFactory;
-    private final IncidentStateMachine incidentStateMachine;
+    private final IncidentRepository    incidentRepository;
+    private final AuditLogRepository    auditLogRepository;
+    private final IncidentMapper        incidentMapper;
+    private final IncidentFactory       incidentFactory;
+    private final IncidentStateMachine  incidentStateMachine;
+    private final IncidentEventProducer eventProducer;          // ← ajout
+
+    // ─── CREATE ──────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -48,9 +55,14 @@ public class IncidentServiceImpl implements IncidentService {
                 .build();
         incident.addAuditLog(auditLog);
 
-        log.info("Incident created: {}", incident.getId());
+        // Publication Kafka APRÈS le save (DB = source de vérité)
+        eventProducer.sendIncidentCreated(incidentMapper.toCreatedEvent(incident));
+
+        log.info("[Service] Incident created & event sent: id={}", incident.getId());
         return incidentMapper.toIncidentResponse(incident);
     }
+
+    // ─── READ ─────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
@@ -68,23 +80,26 @@ public class IncidentServiceImpl implements IncidentService {
                 .collect(Collectors.toList());
     }
 
+    // ─── UPDATE ───────────────────────────────────────────────────────────────
+
     @Override
     @Transactional
     public IncidentResponse updateIncident(Long id, UpdateIncidentRequest request, String lastModifiedBy) {
         Incident existingIncident = incidentRepository.findById(id)
                 .orElseThrow(() -> new IncidentNotFoundException("Incident not found with ID: " + id));
 
-        String oldStatus = existingIncident.getStatus().name();
+        String oldStatus   = existingIncident.getStatus().name();
         String oldPriority = existingIncident.getPriority().name();
 
-        Optional.ofNullable(request.getTitle()).ifPresent(existingIncident::setTitle);
+        // Champs simples
+        Optional.ofNullable(request.getTitle())      .ifPresent(existingIncident::setTitle);
         Optional.ofNullable(request.getDescription()).ifPresent(existingIncident::setDescription);
-        Optional.ofNullable(request.getCategory()).ifPresent(existingIncident::setCategory);
-        Optional.ofNullable(request.getAssignedTo()).ifPresent(existingIncident::setAssignedTo);
+        Optional.ofNullable(request.getCategory())   .ifPresent(existingIncident::setCategory);
+        Optional.ofNullable(request.getAssignedTo()) .ifPresent(existingIncident::setAssignedTo);
 
+        // Changement de priorité → recalcul SLA
         if (request.getPriority() != null && !request.getPriority().equals(existingIncident.getPriority())) {
             existingIncident.setPriority(request.getPriority());
-            // ✅ Ligne corrigée (était tronquée)
             existingIncident.setSlaDeadline(
                     incidentFactory.getSlaStrategyFactory()
                             .getStrategy(request.getPriority())
@@ -92,6 +107,7 @@ public class IncidentServiceImpl implements IncidentService {
             );
         }
 
+        // Changement de statut → state machine + resolvedAt
         if (request.getStatus() != null && !request.getStatus().equals(existingIncident.getStatus())) {
             incidentStateMachine.validateTransition(existingIncident.getStatus(), request.getStatus());
             existingIncident.setStatus(request.getStatus());
@@ -109,33 +125,50 @@ public class IncidentServiceImpl implements IncidentService {
 
         Incident updatedIncident = incidentRepository.save(existingIncident);
 
-        if (!oldStatus.equals(updatedIncident.getStatus().name())) {
-            AuditLog statusChangeLog = AuditLog.builder()
+        // Audit + événements Kafka APRÈS le save
+        boolean statusChanged   = !oldStatus.equals(updatedIncident.getStatus().name());
+        boolean priorityChanged = !oldPriority.equals(updatedIncident.getPriority().name());
+
+        if (statusChanged) {
+            updatedIncident.addAuditLog(AuditLog.builder()
                     .incident(updatedIncident)
                     .action("STATUS_CHANGE")
                     .oldValue(oldStatus)
                     .newValue(updatedIncident.getStatus().name())
                     .performedBy(lastModifiedBy)
                     .timestamp(LocalDateTime.now())
-                    .build();
-            updatedIncident.addAuditLog(statusChangeLog);
+                    .build());
+
+            // Kafka : updated ou resolved selon le nouveau statut
+            if (updatedIncident.getStatus() == IncidentStatus.RESOLVED) {
+                eventProducer.sendIncidentResolved(incidentMapper.toResolvedEvent(updatedIncident));
+            } else {
+                eventProducer.sendIncidentUpdated(incidentMapper.toUpdatedEvent(updatedIncident, oldStatus));
+            }
         }
 
-        if (!oldPriority.equals(updatedIncident.getPriority().name())) {
-            AuditLog priorityChangeLog = AuditLog.builder()
+        if (priorityChanged) {
+            updatedIncident.addAuditLog(AuditLog.builder()
                     .incident(updatedIncident)
                     .action("PRIORITY_CHANGE")
                     .oldValue(oldPriority)
                     .newValue(updatedIncident.getPriority().name())
                     .performedBy(lastModifiedBy)
                     .timestamp(LocalDateTime.now())
-                    .build();
-            updatedIncident.addAuditLog(priorityChangeLog);
+                    .build());
+
+            // Kafka : updated pour signaler le changement de priorité
+            if (!statusChanged) { // éviter un double envoi si les deux changent ensemble
+                eventProducer.sendIncidentUpdated(incidentMapper.toUpdatedEvent(updatedIncident, oldStatus));
+            }
         }
 
-        log.info("Incident updated: {}", updatedIncident.getId());
+        log.info("[Service] Incident updated: id={} status={} priority={}",
+                updatedIncident.getId(), updatedIncident.getStatus(), updatedIncident.getPriority());
         return incidentMapper.toIncidentResponse(updatedIncident);
     }
+
+    // ─── DELETE ───────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -143,8 +176,10 @@ public class IncidentServiceImpl implements IncidentService {
         Incident existingIncident = incidentRepository.findById(id)
                 .orElseThrow(() -> new IncidentNotFoundException("Incident not found with ID: " + id));
         incidentRepository.delete(existingIncident);
-        log.info("Incident deleted: {}", id);
+        log.info("[Service] Incident deleted: id={}", id);
     }
+
+    // ─── SLA ──────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -153,8 +188,8 @@ public class IncidentServiceImpl implements IncidentService {
             if (!incident.getSlaBreached()) {
                 incident.setSlaBreached(true);
                 incidentRepository.save(incident);
-                log.warn("SLA breached for incident: {}", incidentId);
-                // TODO: Publier l'événement SLA breach sur Kafka
+                // L'événement SLA est publié par le SlaBreachScheduler (séparation des responsabilités)
+                log.warn("[Service] SLA marked as breached for incidentId={}", incidentId);
             }
         });
     }
