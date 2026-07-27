@@ -5,8 +5,19 @@ spring:
   application:
     name: incident-service
 
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cloudops
+    username: incidents_app
+    password: AppIncidents2025
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: IncidentPool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+
   jpa:
-    database-platform: org.hibernate.dialect.OracleDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: validate
     show-sql: true
@@ -14,11 +25,8 @@ spring:
       hibernate:
         format_sql: true
 
-  spring:
-    flyway:
-      enabled: true
-
-
+  flyway:
+    enabled: true
 
   security:
     oauth2:
@@ -47,41 +55,6 @@ resilience4j:
         register-health-indicator: true
         sliding-window-type: COUNT_BASED
 
-# ─── Multi-Region Oracle DataSources ──────────────────────────────────────────
-oracle:
-  eu:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: incidents_app
-    password: AppIncidents2025
-    hikari:
-      pool-name: IncidentPool-EU
-      minimum-idle: 5
-      maximum-pool-size: 20
-      connection-timeout: 30000
-      connection-test-query: SELECT 1 FROM DUAL
-
-  af:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: incidents_app
-    password: AppIncidents2025
-    hikari:
-      pool-name: IncidentPool-AF
-      minimum-idle: 2
-      maximum-pool-size: 10
-      connection-timeout: 30000
-      connection-test-query: SELECT 1 FROM DUAL
-
-  us:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: incidents_app
-    password: AppIncidents2025
-    hikari:
-      pool-name: IncidentPool-US
-      minimum-idle: 2
-      maximum-pool-size: 10
-      connection-timeout: 30000
-      connection-test-query: SELECT 1 FROM DUAL
-
 springdoc:
   api-docs:
     enabled: true
@@ -104,6 +77,9 @@ spring:
     activate:
       on-profile: docker
 
+  datasource:
+    url: jdbc:postgresql://postgres:5432/cloudops
+
   security:
     oauth2:
       resourceserver:
@@ -114,20 +90,15 @@ spring:
   kafka:
     bootstrap-servers: kafka:9092
 
-oracle:
-  eu:
-    url: jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
-  af:
-    url: jdbc:oracle:thin:@//oracle-af:1521/XEPDB1
-  us:
-    url: jdbc:oracle:thin:@//oracle-us:1521/XEPDB1
-
 # ─── Local Profile ────────────────────────────────────────────────────────────
 ---
 spring:
   config:
     activate:
       on-profile: local
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cloudops
 
   security:
     oauth2:
@@ -138,11 +109,3 @@ spring:
 
   kafka:
     bootstrap-servers: localhost:29092
-
-oracle:
-  eu:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-  af:
-    url: jdbc:oracle:thin:@//localhost:1522/XEPDB1
-  us:
-    url: jdbc:oracle:thin:@//localhost:1523/XEPDB1

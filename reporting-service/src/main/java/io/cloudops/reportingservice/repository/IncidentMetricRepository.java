@@ -14,15 +14,15 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Repository reporting — toutes les requêtes natives Oracle.
+ * Repository reporting — toutes les requêtes natives PostgreSQL.
  *
- * RÈGLES Oracle XE 21c appliquées :
- *  - SYSDATE  au lieu de NOW()
- *  - TRUNC()  au lieu de DATE_TRUNC()
- *  - ADD_MONTHS() au lieu de INTERVAL
- *  - NVL()    au lieu de COALESCE() pour les cas simples
- *  - NUMBER(1) pour les booléens (0/1)
- *  - FETCH FIRST N ROWS ONLY pour la pagination (géré par Spring Data)
+ * RÈGLES PostgreSQL appliquées :
+ *  - NOW()        au lieu de SYSDATE
+ *  - DATE_TRUNC() au lieu de TRUNC()
+ *  - INTERVAL     au lieu de ADD_MONTHS()
+ *  - COALESCE()   au lieu de NVL()
+ *  - SMALLINT (0/1) pour les booléens legacy
+ *  - LIMIT / OFFSET pour la pagination (géré par Spring Data)
  */
 @Repository
 public interface IncidentMetricRepository extends JpaRepository<IncidentMetric, Long> {
@@ -41,7 +41,7 @@ public interface IncidentMetricRepository extends JpaRepository<IncidentMetric, 
     @Query("SELECT COUNT(m) FROM IncidentMetric m WHERE m.status = 'RESOLVED' OR m.status = 'CLOSED'")
     long countResolvedIncidents();
 
-    /** Taux SLA compliance global en % — Oracle: CASE WHEN car pas de CAST BOOLEAN */
+    /** Taux SLA compliance global en % */
     @Query(value = """
         SELECT ROUND(
             (SUM(CASE WHEN sla_breached = 0 THEN 1 ELSE 0 END) * 100.0)
@@ -86,39 +86,39 @@ public interface IncidentMetricRepository extends JpaRepository<IncidentMetric, 
     List<Object[]> countByStatus();
 
     // ═══════════════════════════════════════════════════════════════════════
-    // TENDANCES TEMPORELLES — Oracle: TRUNC(date) = tronquer au jour
+    // TENDANCES TEMPORELLES — DATE_TRUNC(date) = tronquer au jour
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** Tendance 7 derniers jours — Oracle: SYSDATE - 7, TRUNC() pour tronquer au jour */
+    /** Tendance 7 derniers jours — PostgreSQL: NOW() - INTERVAL, DATE_TRUNC() pour tronquer au jour */
     @Query(value = """
-        SELECT TO_CHAR(TRUNC(created_at), 'YYYY-MM-DD') AS day_label,
+        SELECT TO_CHAR(DATE_TRUNC('day', created_at), 'YYYY-MM-DD') AS day_label,
                COUNT(*) AS cnt
         FROM incident_metrics
-        WHERE created_at >= SYSDATE - 7
-        GROUP BY TRUNC(created_at)
-        ORDER BY TRUNC(created_at)
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY DATE_TRUNC('day', created_at)
+        ORDER BY DATE_TRUNC('day', created_at)
         """, nativeQuery = true)
     List<Object[]> getLast7DaysTrend();
 
     /** Tendance 30 derniers jours */
     @Query(value = """
-        SELECT TO_CHAR(TRUNC(created_at), 'YYYY-MM-DD') AS day_label,
+        SELECT TO_CHAR(DATE_TRUNC('day', created_at), 'YYYY-MM-DD') AS day_label,
                COUNT(*) AS cnt
         FROM incident_metrics
-        WHERE created_at >= SYSDATE - 30
-        GROUP BY TRUNC(created_at)
-        ORDER BY TRUNC(created_at)
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY DATE_TRUNC('day', created_at)
+        ORDER BY DATE_TRUNC('day', created_at)
         """, nativeQuery = true)
     List<Object[]> getLast30DaysTrend();
 
-    /** Tendance mensuelle 6 derniers mois — Oracle: TRUNC(date,'MM') pour tronquer au mois */
+    /** Tendance mensuelle 6 derniers mois — PostgreSQL: DATE_TRUNC('month', date) */
     @Query(value = """
-        SELECT TO_CHAR(TRUNC(created_at, 'MM'), 'YYYY-MM') AS month_label,
+        SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month_label,
                COUNT(*) AS cnt
         FROM incident_metrics
-        WHERE created_at >= ADD_MONTHS(SYSDATE, -6)
-        GROUP BY TRUNC(created_at, 'MM')
-        ORDER BY TRUNC(created_at, 'MM')
+        WHERE created_at >= NOW() - INTERVAL '6 months'
+        GROUP BY DATE_TRUNC('month', created_at)
+        ORDER BY DATE_TRUNC('month', created_at)
         """, nativeQuery = true)
     List<Object[]> getLast6MonthsTrend();
 
@@ -187,10 +187,10 @@ public interface IncidentMetricRepository extends JpaRepository<IncidentMetric, 
     // RAPPORT MENSUEL — pour export PDF
     // ═══════════════════════════════════════════════════════════════════════
 
-    /** Incidents d'un mois donné — Oracle: TRUNC(date,'MM') */
+    /** Incidents d'un mois donné — PostgreSQL: DATE_TRUNC('month', date) */
     @Query(value = """
         SELECT * FROM incident_metrics
-        WHERE TRUNC(created_at, 'MM') = TRUNC(TO_DATE(:monthStart, 'YYYY-MM-DD'), 'MM')
+        WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', TO_DATE(:monthStart, 'YYYY-MM-DD'))
         ORDER BY created_at
         """, nativeQuery = true)
     List<IncidentMetric> findByMonth(@Param("monthStart") String monthStart);
@@ -207,7 +207,7 @@ public interface IncidentMetricRepository extends JpaRepository<IncidentMetric, 
             SUM(CASE WHEN sla_breached = 1 THEN 1 ELSE 0 END) AS breached_cnt,
             ROUND(AVG(resolution_time_min), 1) AS avg_resolution_min
         FROM incident_metrics
-        WHERE TRUNC(created_at, 'MM') = TRUNC(TO_DATE(:monthStart, 'YYYY-MM-DD'), 'MM')
+        WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', TO_DATE(:monthStart, 'YYYY-MM-DD'))
         """, nativeQuery = true)
     Object[] getMonthlyStats(@Param("monthStart") String monthStart);
 

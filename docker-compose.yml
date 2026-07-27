@@ -1,89 +1,29 @@
 services:
 
   # ═══════════════════════════════════════════════════════════════
-  # ORACLE XE EU — PRIMARY
+  # POSTGRESQL — APP DATABASE
   # ═══════════════════════════════════════════════════════════════
-  oracle-eu:
-    image: gvenzl/oracle-xe:21-full
-    container_name: oracle-eu-primary
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
     environment:
-      - ORACLE_PASSWORD=CloudOps2025
-      - ORACLE_DATABASE=CLOUDOPS
-      - APP_USER=incidents_app
-      - APP_USER_PASSWORD=AppIncidents2025
+      - POSTGRES_DB=cloudops
+      - POSTGRES_USER=incidents_app
+      - POSTGRES_PASSWORD=AppIncidents2025
     ports:
-      - "1521:1521"
+      - "5432:5432"
     volumes:
-      - oracle-eu-data:/opt/oracle/oradata
-      - ./oracle/init:/container-entrypoint-initdb.d
+      - postgres-data:/var/lib/postgresql/data
+      - ./oracle/init:/docker-entrypoint-initdb.d
     networks:
       - cloudops-network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "/opt/oracle/healthcheck.sh"]
-      interval: 20s
-      timeout: 15s
-      retries: 40
-      start_period: 300s
-
-  # ═══════════════════════════════════════════════════════════════
-  # ORACLE XE AF — STANDBY Afrique
-  # ═══════════════════════════════════════════════════════════════
-  oracle-af:
-    image: gvenzl/oracle-xe:21-full
-    container_name: oracle-af-standby
-    environment:
-      - ORACLE_PASSWORD=CloudOps2025
-      - ORACLE_DATABASE=CLOUDOPSAF
-      - APP_USER=incidents_app
-      - APP_USER_PASSWORD=AppIncidents2025
-      - ORACLE_SGA_TARGET=512m
-      - ORACLE_PGA_AGGREGATE_TARGET=256m
-    ports:
-      - "1522:1521"
-    volumes:
-      - oracle-af-data:/opt/oracle/oradata
-    networks:
-      - cloudops-network
-    depends_on:
-      oracle-eu:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/oracle/healthcheck.sh"]
-      interval: 20s
-      timeout: 15s
-      retries: 40
-      start_period: 360s
-
-  # ═══════════════════════════════════════════════════════════════
-  # ORACLE XE US — STANDBY Amerique
-  # ═══════════════════════════════════════════════════════════════
-  oracle-us:
-    image: gvenzl/oracle-xe:21-full
-    container_name: oracle-us-standby
-    environment:
-      - ORACLE_PASSWORD=CloudOps2025
-      - ORACLE_DATABASE=CLOUDOPSUS
-      - APP_USER=incidents_app
-      - APP_USER_PASSWORD=AppIncidents2025
-      - ORACLE_SGA_TARGET=512m
-      - ORACLE_PGA_AGGREGATE_TARGET=256m
-    ports:
-      - "1523:1521"
-    volumes:
-      - oracle-us-data:/opt/oracle/oradata
-    networks:
-      - cloudops-network
-    depends_on:
-      oracle-eu:
-        condition: service_healthy
-      oracle-af:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/oracle/healthcheck.sh"]
-      interval: 20s
-      timeout: 15s
-      retries: 40
-      start_period: 360s
+      test: ["CMD-SHELL", "pg_isready -U incidents_app -d cloudops"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   # ═══════════════════════════════════════════════════════════════
   # KEYCLOAK DB — PostgreSQL
@@ -255,19 +195,14 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SERVER_PORT=8082
-      - ORACLE_EU_URL=jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
-      - ORACLE_EU_USERNAME=incidents_app
-      - ORACLE_EU_PASSWORD=AppIncidents2025
-      - ORACLE_AF_URL=jdbc:oracle:thin:@//oracle-af:1521/XEPDB1
-      - ORACLE_AF_USERNAME=incidents_app
-      - ORACLE_AF_PASSWORD=AppIncidents2025
-      - ORACLE_US_URL=jdbc:oracle:thin:@//oracle-us:1521/XEPDB1
-      - ORACLE_US_USERNAME=incidents_app
-      - ORACLE_US_PASSWORD=AppIncidents2025
-      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cloudops
+      - SPRING_DATASOURCE_USERNAME=incidents_app
+      - SPRING_DATASOURCE_PASSWORD=AppIncidents2025
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
       - SPRING_JPA_SHOW_SQL=true
-      - SPRING_FLYWAY_ENABLED=false
+      - SPRING_FLYWAY_ENABLED=true
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -292,11 +227,7 @@ services:
       prometheus.io/path: /actuator/prometheus
       prometheus.io/port: "8082"
     depends_on:
-      oracle-eu:
-        condition: service_healthy
-      oracle-af:
-        condition: service_healthy
-      oracle-us:
+      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -323,13 +254,13 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SERVER_PORT=8083
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cloudops
       - SPRING_DATASOURCE_USERNAME=incidents_app
       - SPRING_DATASOURCE_PASSWORD=AppIncidents2025
-      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
-      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
-      - SPRING_FLYWAY_ENABLED=false
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - SPRING_FLYWAY_ENABLED=true
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://keycloak:8180/realms/cloudops-realm/protocol/openid-connect/certs
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -363,7 +294,7 @@ services:
       prometheus.io/path: /actuator/prometheus
       prometheus.io/port: "8083"
     depends_on:
-      oracle-eu:
+      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -390,11 +321,11 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - SERVER_PORT=8084
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cloudops
       - SPRING_DATASOURCE_USERNAME=incidents_app
       - SPRING_DATASOURCE_PASSWORD=AppIncidents2025
-      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=oracle.jdbc.OracleDriver
-      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.OracleDialect
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.PostgreSQLDialect
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_FLYWAY_ENABLED=false
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8180/realms/cloudops-realm
@@ -427,7 +358,7 @@ services:
       prometheus.io/path: /actuator/prometheus
       prometheus.io/port: "8084"
     depends_on:
-      oracle-eu:
+      postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -621,9 +552,7 @@ services:
 # VOLUMES
 # ═══════════════════════════════════════════════════════════════
 volumes:
-  oracle-eu-data:
-  oracle-af-data:
-  oracle-us-data:
+  postgres-data:
   keycloak-data:
   zookeeper-data:
   zookeeper-logs:

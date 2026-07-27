@@ -35,7 +35,7 @@ public class Notification {
     @Column(nullable = false)
     private String type;
 
-    @Lob                        // ← ajoute @Lob pour mapper CLOB Oracle
+    @Lob
     @Column(nullable = false)
     private String message;
 

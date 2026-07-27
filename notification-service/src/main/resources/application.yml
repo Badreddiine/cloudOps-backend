@@ -6,19 +6,18 @@ spring:
     name: notification-service
 
   datasource:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    url: jdbc:postgresql://localhost:5432/cloudops
     username: incidents_app
     password: AppIncidents2025
-    driver-class-name: oracle.jdbc.OracleDriver
+    driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: NotificationPool
       minimum-idle: 2
       maximum-pool-size: 10
       connection-timeout: 30000
-      connection-test-query: SELECT 1 FROM DUAL
 
   jpa:
-    database-platform: org.hibernate.dialect.OracleDialect
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: validate
     show-sql: true
@@ -27,8 +26,8 @@ spring:
         format_sql: true
 
   flyway:
-    enabled: false
-    locations: classpath:db/migration/oracle
+    enabled: true
+    locations: classpath:db/migration/postgresql
     baseline-on-migrate: true
     user: incidents_app
     password: AppIncidents2025
@@ -97,10 +96,10 @@ spring:
       on-profile: docker
 
   datasource:
-    url: jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1
+    url: jdbc:postgresql://postgres:5432/cloudops
 
   flyway:
-    url: jdbc:oracle:thin:@//oracle-eu:1521/XEPDB1  # ← CORRECTION
+    url: jdbc:postgresql://postgres:5432/cloudops
 
   security:
     oauth2:
@@ -120,10 +119,10 @@ spring:
       on-profile: local
 
   datasource:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    url: jdbc:postgresql://localhost:5432/cloudops
 
   flyway:
-    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1  # ← CORRECTION
+    url: jdbc:postgresql://localhost:5432/cloudops
 
   security:
     oauth2:

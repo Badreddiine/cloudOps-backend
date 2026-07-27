@@ -29,7 +29,7 @@
     <java.version>17</java.version>
     <spring-cloud.version>2024.0.0</spring-cloud.version>
     <resilience4j.version>2.2.0</resilience4j.version>
-    <oracle.version>23.4.0.24.05</oracle.version>
+    <postgresql.version>42.7.4</postgresql.version>
     <poi.version>5.3.0</poi.version>
     <itext.version>8.0.5</itext.version>
     <mapstruct.version>1.5.5.Final</mapstruct.version>
@@ -61,22 +61,17 @@
         <scope>import</scope>
       </dependency>
 
-      <!-- Oracle JDBC -->
+      <!-- PostgreSQL JDBC -->
       <dependency>
-        <groupId>com.oracle.database.jdbc</groupId>
-        <artifactId>ojdbc11</artifactId>
-        <version>${oracle.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.oracle.database.jdbc</groupId>
-        <artifactId>ucp</artifactId>
-        <version>${oracle.version}</version>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <version>${postgresql.version}</version>
       </dependency>
 
-      <!-- Flyway Oracle -->
+      <!-- Flyway PostgreSQL -->
       <dependency>
         <groupId>org.flywaydb</groupId>
-        <artifactId>flyway-database-oracle</artifactId>
+        <artifactId>flyway-database-postgresql</artifactId>
         <version>10.10.0</version>
       </dependency>
 

@@ -17,9 +17,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class AuditLog {
 
-    // ── AVANT (PostgreSQL) : @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // ── APRÈS (Oracle)     : identique — NUMBER(19) GENERATED ALWAYS AS IDENTITY
-    //    → GenerationType.IDENTITY est le bon mapping Oracle, rien à changer ici
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -30,8 +27,6 @@ public class AuditLog {
 
     private String action;          // CREATE, UPDATE, STATUS_CHANGE, ASSIGN
 
-    // ── AVANT (PostgreSQL) : TEXT → String sans annotation
-    // ── APRÈS (Oracle)     : CLOB → @Lob obligatoire sinon Hibernate tronque à 255 chars
     @Lob
     @Column(name = "old_value")
     private String oldValue;

@@ -28,7 +28,7 @@ public class ReportingService {
 
     @Cacheable(value = "dashboard", key = "'global'")
     public DashboardResponseDTO getDashboard() {
-        log.debug("[Reporting] Cache MISS → calcul dashboard depuis Oracle");
+        log.debug("[Reporting] Cache MISS → calcul dashboard depuis PostgreSQL");
         return DashboardResponseDTO.builder()
             .kpis(buildKpis())
             .byPriority(buildByPriority(null, null))

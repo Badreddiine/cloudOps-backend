@@ -54,7 +54,7 @@ public class KafkaConfig {
             new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
         factory.setConcurrency(3);
-        // ACK manuel pour éviter de perdre des events en cas d'erreur Oracle
+        // ACK manuel pour éviter de perdre des events en cas d'erreur base de données
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
         return factory;
     }

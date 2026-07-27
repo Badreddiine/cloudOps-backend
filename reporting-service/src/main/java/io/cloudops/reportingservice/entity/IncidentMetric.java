@@ -7,13 +7,11 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 /**
- * Projection Oracle des événements Kafka incidents.
+ * Projection PostgreSQL des événements Kafka incidents.
  * Utilisée exclusivement pour les agrégations analytiques.
  *
- * NOTE Oracle XE 21c :
- *  - Pas de type BOOLEAN natif → NUMBER(1)  (0=false, 1=true)
- *  - Séquence explicite obligatoire
- *  - Noms de colonnes en MAJUSCULES recommandés
+ * Le champ slaBreached reste un Integer (0/1) car les requêtes natives
+ * du repository comparent explicitement sur ces valeurs.
  */
 @Entity
 @Table(
@@ -83,10 +81,9 @@ public class IncidentMetric {
     private LocalDateTime slaDeadline;
 
     /**
-     * Oracle XE 21c ne supporte pas BOOLEAN natif.
      * 0 = SLA respecté, 1 = SLA dépassé
      */
-    @Column(name = "SLA_BREACHED", columnDefinition = "NUMBER(1) DEFAULT 0")
+    @Column(name = "SLA_BREACHED", columnDefinition = "SMALLINT DEFAULT 0")
     private Integer slaBreached;
 
     /** Durée de résolution en minutes (calculé à la résolution) */
