@@ -149,7 +149,7 @@ services:
   # KAFKA JMX EXPORTER
   # ═══════════════════════════════════════════════════════════════
   kafka-jmx-exporter:
-    image: bitnami/jmx-exporter:latest
+    image: soldevelo/jmx-exporter:latest
     container_name: kafka-jmx-exporter
     ports:
       - "9404:9404"
